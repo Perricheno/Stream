@@ -12,6 +12,10 @@ export interface PlayerHandle {
   requestPictureInPicture?(): void;
   getPlaybackRate(): number;
   setPlaybackRate(rate: number): void;
+  /** Quality selection — only implemented for YouTube (direct files just play whatever the URL points to). */
+  getQualities?(): string[];
+  getQuality?(): string;
+  setQuality?(quality: string): void;
 }
 
 export interface PlayerAdapterEvents {

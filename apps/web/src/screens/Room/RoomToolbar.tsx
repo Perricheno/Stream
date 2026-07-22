@@ -13,6 +13,7 @@ interface RoomToolbarProps {
   onInviteFriend: () => void;
   onOpenQueue: () => void;
   queueCount: number;
+  onShowQr: () => void;
   onLeave: () => void;
 }
 
@@ -25,6 +26,7 @@ export function RoomToolbar({
   onInviteFriend,
   onOpenQueue,
   queueCount,
+  onShowQr,
   onLeave,
 }: RoomToolbarProps) {
   const haptics = useHapticFeedback();
@@ -56,6 +58,7 @@ export function RoomToolbar({
           onInviteFriend={onInviteFriend}
           onOpenQueue={onOpenQueue}
           queueCount={queueCount}
+          onShowQr={onShowQr}
           onLeave={onLeave}
         />
       </div>

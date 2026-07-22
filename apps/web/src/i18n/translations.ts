@@ -57,6 +57,11 @@ const ru = {
   addToHomeScreen: "На главный экран",
   addToHomeScreenDone: "Ярлык добавлен",
   addToHomeScreenFailed: "Не получилось добавить ярлык",
+  showQrCode: "Показать QR-код",
+  qrCodeHint: "Дайте другу отсканировать этот код камерой Telegram",
+  scanQrCode: "Сканировать QR-код",
+  scanQrPrompt: "Наведите камеру на QR-код комнаты",
+  scanQrInvalid: "Не удалось распознать код комнаты",
 } as const;
 
 const en: Record<keyof typeof ru, string> = {
@@ -116,6 +121,11 @@ const en: Record<keyof typeof ru, string> = {
   addToHomeScreen: "Add to home screen",
   addToHomeScreenDone: "Shortcut added",
   addToHomeScreenFailed: "Couldn't add the shortcut",
+  showQrCode: "Show QR code",
+  qrCodeHint: "Have a friend scan this with Telegram's camera",
+  scanQrCode: "Scan QR code",
+  scanQrPrompt: "Point the camera at the room's QR code",
+  scanQrInvalid: "Couldn't recognize a room code",
 };
 
 export type TranslationKey = keyof typeof ru;

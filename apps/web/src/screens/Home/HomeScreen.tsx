@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Cell, IconButton, Input, List, Modal, Section } from "@telegram-apps/telegram-ui";
+import { openQrScanner } from "@telegram-apps/sdk-react";
+import { parseRoomCodeFromScan } from "../../app/parseRoomLink";
 import { useHapticFeedback } from "../../telegram/useHapticFeedback";
 import { useRecentRooms } from "../../telegram/useRecentRooms";
 import { useFriends } from "../../telegram/useFriends";
@@ -104,6 +106,26 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
     onOpenRoom(id);
   }, [joinCode, addRoom, onOpenRoom, haptics]);
 
+  const scanQrToJoin = useCallback(async () => {
+    if (!openQrScanner.isAvailable()) return;
+    try {
+      const scanned = await openQrScanner({ text: t("scanQrPrompt") });
+      if (!scanned) return; // scanner closed without a result
+      const code = parseRoomCodeFromScan(scanned);
+      if (!code) {
+        haptics.notify("error");
+        return;
+      }
+      haptics.impact("medium");
+      addRoom(code);
+      setJoinOpen(false);
+      setJoinCode("");
+      onOpenRoom(code);
+    } catch {
+      haptics.notify("error");
+    }
+  }, [addRoom, onOpenRoom, haptics, t]);
+
   return (
     <List>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, padding: "12px 16px 0" }}>
@@ -160,6 +182,11 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
           <Button stretched size="l" disabled={!joinCode.trim()} onClick={joinRoom}>
             {t("join")}
           </Button>
+          {openQrScanner.isAvailable() && (
+            <Button stretched size="l" mode="bezeled" onClick={scanQrToJoin}>
+              {t("scanQrCode")}
+            </Button>
+          )}
         </div>
       </Modal>
 

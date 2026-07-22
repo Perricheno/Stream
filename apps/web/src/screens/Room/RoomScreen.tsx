@@ -3,6 +3,7 @@ import { Placeholder, Snackbar } from "@telegram-apps/telegram-ui";
 import { shareURL } from "@telegram-apps/sdk-react";
 import type { VideoSource } from "@stream/shared";
 import { useBackButton } from "../../telegram/useBackButton";
+import { useClosingConfirmation } from "../../telegram/useClosingConfirmation";
 import { useHapticFeedback } from "../../telegram/useHapticFeedback";
 import { useTelegramUser } from "../../telegram/useInitData";
 import { useProfile } from "../../telegram/ProfileContext";
@@ -18,6 +19,7 @@ import { FriendsPanel } from "../Friends/FriendsPanel";
 import { ParticipantsBar } from "./ParticipantsBar";
 import { VideoSourcePicker } from "./VideoSourcePicker";
 import { QueuePanel } from "./QueuePanel";
+import { RoomQrModal } from "./RoomQrModal";
 import { parseVideoUrl } from "./parseVideoUrl";
 import { RoomToolbar } from "./RoomToolbar";
 import { ChatPanel } from "./ChatPanel";
@@ -40,6 +42,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
   const [pickingSource, setPickingSource] = useState(false);
   const [hostToast, setHostToast] = useState<string | null>(null);
   const autoplayedSourceRef = useRef<string | null>(null);
@@ -81,14 +84,19 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
     if (confirmed) onExit();
   }, [onExit]);
   useBackButton(true, handleBack);
+  // Covers closing via Telegram's own X/swipe-down — handleBack above only
+  // intercepts in-app navigation (our custom back button), not that.
+  useClosingConfirmation(true);
+
+  const inviteUrl = BOT_USERNAME ? `https://t.me/${BOT_USERNAME}?startapp=room_${roomId}` : null;
 
   const handleShare = useCallback(() => {
-    if (!BOT_USERNAME) {
+    if (!inviteUrl) {
       haptics.notify("error");
       return;
     }
-    shareURL(`https://t.me/${BOT_USERNAME}?startapp=room_${roomId}`, "Присоединяйся к просмотру!");
-  }, [roomId, haptics]);
+    shareURL(inviteUrl, "Присоединяйся к просмотру!");
+  }, [inviteUrl, haptics]);
 
   useEffect(() => {
     if (status === "joined") haptics.notify("success");
@@ -170,6 +178,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
           onInviteFriend={() => setFriendsOpen(true)}
           onOpenQueue={() => setQueueOpen(true)}
           queueCount={room.queue.length}
+          onShowQr={() => (inviteUrl ? setQrOpen(true) : haptics.notify("error"))}
           onLeave={handleBack}
         />
         <ParticipantsBar
@@ -218,6 +227,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
           {hostToast}
         </Snackbar>
       )}
+      {inviteUrl && <RoomQrModal open={qrOpen} onOpenChange={setQrOpen} roomId={roomId} inviteUrl={inviteUrl} />}
     </div>
   );
 }

@@ -30,6 +30,9 @@ export const YouTubePlayerAdapter = forwardRef<PlayerHandle, YouTubePlayerAdapte
         setVolume: (volume) => playerRef.current?.setVolume(Math.round(Math.min(1, Math.max(0, volume)) * 100)),
         getPlaybackRate: () => playerRef.current?.getPlaybackRate() ?? 1,
         setPlaybackRate: (rate) => playerRef.current?.setPlaybackRate(rate),
+        getQualities: () => playerRef.current?.getAvailableQualityLevels() ?? [],
+        getQuality: () => playerRef.current?.getPlaybackQuality() ?? "auto",
+        setQuality: (quality) => playerRef.current?.setPlaybackQuality(quality),
       }),
       [],
     );

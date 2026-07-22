@@ -1,4 +1,13 @@
-import { backButton, init as initSdk, isTMA, miniApp, themeParams, viewport } from "@telegram-apps/sdk-react";
+import {
+  backButton,
+  closingBehavior,
+  init as initSdk,
+  isTMA,
+  miniApp,
+  requestFullscreen,
+  themeParams,
+  viewport,
+} from "@telegram-apps/sdk-react";
 
 const DEV_USER = {
   id: 1,
@@ -129,6 +138,7 @@ export function bootstrapTelegram(): void {
   if (miniApp.bindCssVars.isAvailable()) miniApp.bindCssVars();
   if (themeParams.bindCssVars.isAvailable()) themeParams.bindCssVars();
   if (backButton.mount.isAvailable()) backButton.mount();
+  if (closingBehavior.mount.isAvailable()) closingBehavior.mount();
 
   if (viewport.mount.isAvailable() && !viewport.isMounting()) {
     viewport
@@ -136,6 +146,18 @@ export function bootstrapTelegram(): void {
       .then(() => {
         if (viewport.expand.isAvailable()) viewport.expand();
         if (viewport.bindCssVars.isAvailable()) viewport.bindCssVars();
+        // Requests real app-level fullscreen (Bot API 8.0) right away rather
+        // than leaving it behind a menu toggle. Without this, iOS shows the
+        // Mini App as a draggable bottom sheet — a user can drag it up/down
+        // mid-use, which briefly exposes blank space while the WebView's
+        // viewport height is still catching up to the new sheet position.
+        // Locking into fullscreen removes the drag gesture entirely.
+        if (requestFullscreen.isAvailable()) {
+          requestFullscreen().catch(() => {
+            // Older clients/desktop report support inconsistently — the app
+            // still works fine in the regular expanded (non-fullscreen) state.
+          });
+        }
       })
       .catch(() => {
         // Viewport isn't available in this environment (e.g. some desktop

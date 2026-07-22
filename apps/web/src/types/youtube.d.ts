@@ -40,6 +40,9 @@ declare namespace YT {
     getPlaybackRate(): number;
     setPlaybackRate(suggestedRate: number): void;
     getAvailablePlaybackRates(): number[];
+    getPlaybackQuality(): string;
+    setPlaybackQuality(suggestedQuality: string): void;
+    getAvailableQualityLevels(): string[];
     destroy(): void;
   }
 }

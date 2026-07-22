@@ -22,6 +22,7 @@ interface RoomMenuProps {
   onInviteFriend: () => void;
   onOpenQueue: () => void;
   queueCount: number;
+  onShowQr: () => void;
   onLeave: () => void;
 }
 
@@ -33,6 +34,7 @@ export function RoomMenu({
   onInviteFriend,
   onOpenQueue,
   queueCount,
+  onShowQr,
   onLeave,
 }: RoomMenuProps) {
   const [open, setOpen] = useState(false);
@@ -67,6 +69,14 @@ export function RoomMenu({
             }}
           >
             {t("inviteToRoom")}
+          </Cell>
+          <Cell
+            onClick={() => {
+              setOpen(false);
+              onShowQr();
+            }}
+          >
+            {t("showQrCode")}
           </Cell>
           {hasSource && (
             <Cell

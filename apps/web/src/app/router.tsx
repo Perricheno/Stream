@@ -24,13 +24,21 @@ function readFriendIdFromStartParam(startParam: string | undefined): number | nu
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
+/** Cross-fades Home<->Room via the View Transitions API where supported (Telegram's own iOS client's WebKit gained support in 2024); an instant swap otherwise — no worse than before. */
+function navigateWithTransition(update: () => void): void {
+  const startViewTransition = (document as Document & { startViewTransition?: (cb: () => void) => void })
+    .startViewTransition;
+  if (startViewTransition) startViewTransition.call(document, update);
+  else update();
+}
+
 export function AppRouter() {
   const { startParam } = useLaunchParams();
   const [roomId, setRoomId] = useState<string | null>(() => readRoomIdFromStartParam(startParam));
   const [autoAddFriendId] = useState<number | null>(() => readFriendIdFromStartParam(startParam));
 
-  const openRoom = useCallback((id: string) => setRoomId(id), []);
-  const goHome = useCallback(() => setRoomId(null), []);
+  const openRoom = useCallback((id: string) => navigateWithTransition(() => setRoomId(id)), []);
+  const goHome = useCallback(() => navigateWithTransition(() => setRoomId(null)), []);
 
   if (roomId) {
     return (
