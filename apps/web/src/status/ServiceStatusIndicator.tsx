@@ -9,13 +9,9 @@ export function ServiceStatusIndicator() {
 
   return (
     <>
-      <button
-        type="button"
-        className={styles.dot}
-        data-state={status.state}
-        onClick={() => setOpen(true)}
-        aria-label="Статус сервиса"
-      />
+      <button type="button" className={styles.tapTarget} onClick={() => setOpen(true)} aria-label="Статус сервиса">
+        <span className={styles.dot} data-state={status.state} />
+      </button>
       <ServiceStatusPanel open={open} onOpenChange={setOpen} status={status} />
     </>
   );

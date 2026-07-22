@@ -4,6 +4,7 @@ import { useHapticFeedback } from "../../telegram/useHapticFeedback";
 import { useRecentRooms } from "../../telegram/useRecentRooms";
 import { StickerPlayer } from "../../stickers/StickerPlayer";
 import { ServiceStatusIndicator } from "../../status/ServiceStatusIndicator";
+import { ModalBackdrop } from "../../components/ModalBackdrop";
 import { SettingsPanel } from "../Settings/SettingsPanel";
 import { CreateRoomCard } from "./CreateRoomCard";
 import { RecentRoomsList } from "./RecentRoomsList";
@@ -67,6 +68,8 @@ export function HomeScreen({ onOpenRoom }: HomeScreenProps) {
         open={joinOpen}
         onOpenChange={setJoinOpen}
         header={<Modal.Header>Войти по коду</Modal.Header>}
+        overlayComponent={<ModalBackdrop />}
+        style={{ backgroundColor: "var(--tg-theme-secondary-bg-color, #232e3c)" }}
       >
         <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "flex", justifyContent: "center" }}>

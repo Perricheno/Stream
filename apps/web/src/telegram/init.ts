@@ -1,12 +1,4 @@
-import {
-  backButton,
-  init as initSdk,
-  isTMA,
-  miniApp,
-  mockTelegramEnv,
-  themeParams,
-  viewport,
-} from "@telegram-apps/sdk-react";
+import { backButton, init as initSdk, isTMA, miniApp, themeParams, viewport } from "@telegram-apps/sdk-react";
 
 const DEV_USER = {
   id: 1,
@@ -29,47 +21,61 @@ function detectMockPlatform(): "ios" | "android" | "tdesktop" {
   return "tdesktop";
 }
 
-function buildMockLaunchParams() {
+/**
+ * Puts the launch params in the URL hash — the same place a real Telegram
+ * launch puts them, and the first (most reliable) source
+ * `retrieveLaunchParams()` checks. Both `mockTelegramEnv()`'s own
+ * object→string serializer AND its sessionStorage-fallback path have a bug
+ * in this SDK version that silently drops `platform`/`initData` on the
+ * round-trip, making `init()` throw even immediately after mocking — the
+ * URL-hash path avoids both, since it's parsed directly with no round-trip.
+ * Also installs a minimal `TelegramWebviewProxy.postEvent` stub so native
+ * calls (haptics, buttons, popups) no-op instead of throwing in this
+ * dev-only path.
+ */
+function installMockBridge(rawLaunchParams: string): void {
+  window.location.hash = rawLaunchParams;
+  (window as unknown as { TelegramWebviewProxy: { postEvent: (event: string, data?: unknown) => void } }).TelegramWebviewProxy = {
+    postEvent: () => {
+      // Mock/dev only — this path never runs inside real Telegram.
+    },
+  };
+}
+
+function buildMockLaunchParamsRaw(): string {
   const authDateSeconds = Math.floor(Date.now() / 1000);
   const hash = "0".repeat(64);
   const initDataRaw = new URLSearchParams({
     user: JSON.stringify(DEV_USER),
     auth_date: String(authDateSeconds),
     hash,
+    // The typed InitData shape requires `signature` — any string satisfies
+    // the parser here, it's only actually verified server-side via `hash`.
+    signature: "dev-mock-signature",
   }).toString();
 
-  return {
-    themeParams: {
-      accentTextColor: "#6ab2f2",
-      bgColor: "#17212b",
-      buttonColor: "#5288c1",
-      buttonTextColor: "#ffffff",
-      destructiveTextColor: "#ec3942",
-      headerBgColor: "#17212b",
-      hintColor: "#708499",
-      linkColor: "#6ab3f3",
-      secondaryBgColor: "#232e3c",
-      sectionBgColor: "#17212b",
-      sectionHeaderTextColor: "#6ab3f3",
-      subtitleTextColor: "#708499",
-      textColor: "#f5f5f5",
-    } as const,
-    initData: {
-      authDate: new Date(authDateSeconds * 1000),
-      hash,
-      signature: "dev-mock-signature",
-      user: {
-        id: DEV_USER.id,
-        firstName: DEV_USER.first_name,
-        lastName: DEV_USER.last_name,
-        username: DEV_USER.username,
-        languageCode: DEV_USER.language_code,
-      },
-    },
-    initDataRaw,
-    version: "8",
-    platform: detectMockPlatform(),
-  };
+  const themeParamsRaw = JSON.stringify({
+    accent_text_color: "#6ab2f2",
+    bg_color: "#17212b",
+    button_color: "#5288c1",
+    button_text_color: "#ffffff",
+    destructive_text_color: "#ec3942",
+    header_bg_color: "#17212b",
+    hint_color: "#708499",
+    link_color: "#6ab3f3",
+    secondary_bg_color: "#232e3c",
+    section_bg_color: "#17212b",
+    section_header_text_color: "#6ab3f3",
+    subtitle_text_color: "#708499",
+    text_color: "#f5f5f5",
+  });
+
+  return new URLSearchParams({
+    tgWebAppData: initDataRaw,
+    tgWebAppVersion: "8",
+    tgWebAppPlatform: detectMockPlatform(),
+    tgWebAppThemeParams: themeParamsRaw,
+  }).toString();
 }
 
 /**
@@ -84,6 +90,10 @@ function buildMockLaunchParams() {
  * the mock environment so the UI (theme, buttons, haptics) still works —
  * the socket auth path doesn't depend on this parser anyway, it reads the
  * raw initData straight from the URL (see rawInitData.ts).
+ *
+ * Both branches are wrapped defensively: an uncaught throw here happens
+ * before React ever mounts (this runs at the top of main.tsx), so it would
+ * blank the entire page rather than degrade gracefully.
  */
 export function bootstrapTelegram(): void {
   let initialized = false;
@@ -101,9 +111,19 @@ export function bootstrapTelegram(): void {
   }
 
   if (!initialized) {
-    mockTelegramEnv(buildMockLaunchParams());
-    initSdk();
+    try {
+      installMockBridge(buildMockLaunchParamsRaw());
+      initSdk();
+      initialized = true;
+    } catch (err) {
+      console.error(
+        "[telegram] Mock environment initialization also failed — the app will render without Telegram theming/buttons:",
+        err,
+      );
+    }
   }
+
+  if (!initialized) return;
 
   if (miniApp.mount.isAvailable()) miniApp.mount();
   if (miniApp.bindCssVars.isAvailable()) miniApp.bindCssVars();

@@ -1,4 +1,5 @@
 import { Button, Cell, List, Modal, Section } from "@telegram-apps/telegram-ui";
+import { ModalBackdrop } from "../components/ModalBackdrop";
 import type { ServiceStatus } from "./useServiceStatus";
 
 const STATE_LABEL: Record<ServiceStatus["state"], string> = {
@@ -16,11 +17,17 @@ interface ServiceStatusPanelProps {
 
 export function ServiceStatusPanel({ open, onOpenChange, status }: ServiceStatusPanelProps) {
   return (
-    <Modal open={open} onOpenChange={onOpenChange} header={<Modal.Header>Статус сервиса</Modal.Header>}>
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      header={<Modal.Header>Статус сервиса</Modal.Header>}
+      overlayComponent={<ModalBackdrop />}
+      style={{ backgroundColor: "var(--tg-theme-secondary-bg-color, #232e3c)" }}
+    >
       <List>
         <Section header={STATE_LABEL[status.state]}>
           <Cell after={status.latencyMs !== null ? `${status.latencyMs} мс` : "—"}>Задержка</Cell>
-          <Cell after={status.socketConnected ? "Подключено" : "Не подключено"}>Соединение</Cell>
+          <Cell after={status.socketConnected ? "Подключено" : "Вне комнаты"}>Сокет комнаты</Cell>
           <Cell after={status.activeRooms ?? "—"}>Активных комнат</Cell>
           <Cell after={status.connectedSockets ?? "—"}>Подключений к серверу</Cell>
           <Cell after={status.uptimeSeconds !== null ? `${Math.floor(status.uptimeSeconds / 60)} мин` : "—"}>

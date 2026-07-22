@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Cell, IconButton, List, Modal } from "@telegram-apps/telegram-ui";
+import { ModalBackdrop } from "../../components/ModalBackdrop";
 
 function DotsIcon() {
   return (
@@ -27,7 +28,13 @@ export function RoomMenu({ onShare, hasSource, onChangeSource, onOpenSettings, o
       <IconButton mode="plain" size="m" onClick={() => setOpen(true)} aria-label="Меню">
         <DotsIcon />
       </IconButton>
-      <Modal open={open} onOpenChange={setOpen} header={<Modal.Header>Меню</Modal.Header>}>
+      <Modal
+        open={open}
+        onOpenChange={setOpen}
+        header={<Modal.Header>Меню</Modal.Header>}
+        overlayComponent={<ModalBackdrop />}
+        style={{ backgroundColor: "var(--tg-theme-secondary-bg-color, #232e3c)" }}
+      >
         <List>
           <Cell
             onClick={() => {

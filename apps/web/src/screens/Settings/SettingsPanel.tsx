@@ -1,5 +1,6 @@
 import { Cell, Input, List, Modal, Section, Switch } from "@telegram-apps/telegram-ui";
 import { useUserSettings } from "../../telegram/useUserSettings";
+import { ModalBackdrop } from "../../components/ModalBackdrop";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -10,7 +11,13 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const { settings, updateSettings } = useUserSettings();
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} header={<Modal.Header>Настройки</Modal.Header>}>
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      header={<Modal.Header>Настройки</Modal.Header>}
+      overlayComponent={<ModalBackdrop />}
+      style={{ backgroundColor: "var(--tg-theme-secondary-bg-color, #232e3c)" }}
+    >
       <List>
         <Section header="Профиль в комнате" footer="Применяется во всех комнатах, которые вы создаёте или к которым присоединяетесь">
           <Cell>
