@@ -1,6 +1,7 @@
 import type { Server } from "socket.io";
 import { validateInitData } from "../telegram/validateInitData";
 import { env } from "../config/env";
+import { upsertUser } from "../db/userRepository";
 import type { SocketUser } from "./types";
 
 /**
@@ -14,6 +15,7 @@ export function registerAuthMiddleware(io: Server): void {
     if (env.devSkipAuth) {
       const fallbackId = Math.floor(Math.random() * 1_000_000) + 1000;
       const user: SocketUser = { id: fallbackId, firstName: `Guest ${fallbackId}` };
+      upsertUser(user);
       socket.data.user = user;
       next();
       return;
@@ -28,6 +30,7 @@ export function registerAuthMiddleware(io: Server): void {
     try {
       const { user } = validateInitData(initDataRaw, env.botToken);
       const socketUser: SocketUser = { id: user.id, firstName: user.first_name, photoUrl: user.photo_url };
+      upsertUser(socketUser);
       socket.data.user = socketUser;
       next();
     } catch {

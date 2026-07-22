@@ -1,8 +1,12 @@
 import { Avatar, AvatarStack, Caption } from "@telegram-apps/telegram-ui";
 import type { Participant } from "@stream/shared";
+import { confirmAction } from "../../telegram/confirmAction";
 
 interface ParticipantsBarProps {
   participants: Participant[];
+  currentUserId?: number;
+  isHost: boolean;
+  onKick: (userId: number) => void;
 }
 
 function pluralParticipants(count: number): string {
@@ -13,8 +17,17 @@ function pluralParticipants(count: number): string {
   return "участников";
 }
 
-export function ParticipantsBar({ participants }: ParticipantsBarProps) {
+export function ParticipantsBar({ participants, currentUserId, isHost, onKick }: ParticipantsBarProps) {
   if (participants.length === 0) return null;
+
+  const handleAvatarClick = async (participant: Participant) => {
+    if (!isHost || participant.userId === currentUserId) return;
+    const confirmed = await confirmAction(
+      `${participant.firstName} больше не сможет находиться в этой комнате.`,
+      "Удалить участника?",
+    );
+    if (confirmed) onKick(participant.userId);
+  };
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px" }}>
@@ -25,6 +38,8 @@ export function ParticipantsBar({ participants }: ParticipantsBarProps) {
             size={28}
             src={participant.photoUrl}
             acronym={participant.firstName.slice(0, 2).toUpperCase()}
+            style={isHost && participant.userId !== currentUserId ? { cursor: "pointer" } : undefined}
+            onClick={() => handleAvatarClick(participant)}
           />
         ))}
       </AvatarStack>

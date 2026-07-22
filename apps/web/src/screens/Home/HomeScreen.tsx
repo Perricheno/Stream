@@ -1,11 +1,14 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, IconButton, Input, List, Modal, Section } from "@telegram-apps/telegram-ui";
 import { useHapticFeedback } from "../../telegram/useHapticFeedback";
 import { useRecentRooms } from "../../telegram/useRecentRooms";
+import { useFriends } from "../../telegram/useFriends";
+import { useTranslation } from "../../i18n/useTranslation";
 import { StickerPlayer } from "../../stickers/StickerPlayer";
 import { ServiceStatusIndicator } from "../../status/ServiceStatusIndicator";
 import { ModalBackdrop } from "../../components/ModalBackdrop";
 import { SettingsPanel } from "../Settings/SettingsPanel";
+import { FriendsPanel } from "../Friends/FriendsPanel";
 import { CreateRoomCard } from "./CreateRoomCard";
 import { RecentRoomsList } from "./RecentRoomsList";
 
@@ -17,20 +20,44 @@ function GearIcon() {
   );
 }
 
+function PeopleIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.33 0-8 1.67-8 5v2h16v-2c0-3.33-4.67-5-8-5zm7.5-2a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm0 1.5c-.6 0-1.28.07-2 .2 1.86 1 3 2.4 3 4.3v2h6v-2c0-3-4-4.5-7-4.5z" />
+    </svg>
+  );
+}
+
 function generateRoomId(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
 interface HomeScreenProps {
   onOpenRoom: (roomId: string) => void;
+  autoAddFriendId?: number | null;
 }
 
-export function HomeScreen({ onOpenRoom }: HomeScreenProps) {
+export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
   const { rooms, loaded, addRoom } = useRecentRooms();
+  const { addFriend } = useFriends();
   const haptics = useHapticFeedback();
+  const { t } = useTranslation();
   const [joinOpen, setJoinOpen] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [friendsOpen, setFriendsOpen] = useState(false);
+  const autoAddedRef = useRef(false);
+
+  useEffect(() => {
+    if (!autoAddFriendId || autoAddedRef.current) return;
+    autoAddedRef.current = true;
+    addFriend(autoAddFriendId)
+      .then(() => {
+        haptics.notify("success");
+        setFriendsOpen(true);
+      })
+      .catch(() => haptics.notify("error"));
+  }, [autoAddFriendId, addFriend, haptics]);
 
   const createRoom = useCallback(() => {
     haptics.impact("medium");
@@ -53,12 +80,15 @@ export function HomeScreen({ onOpenRoom }: HomeScreenProps) {
     <List>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, padding: "12px 16px 0" }}>
         <ServiceStatusIndicator />
-        <IconButton mode="plain" size="m" onClick={() => setSettingsOpen(true)} aria-label="Настройки">
+        <IconButton mode="plain" size="m" onClick={() => setFriendsOpen(true)} aria-label={t("friends")}>
+          <PeopleIcon />
+        </IconButton>
+        <IconButton mode="plain" size="m" onClick={() => setSettingsOpen(true)} aria-label={t("settings")}>
           <GearIcon />
         </IconButton>
       </div>
 
-      <Section header="Stream" footer="Смотрите видео вместе с друзьями прямо в Telegram">
+      <Section header={t("appTitle")} footer={t("appTagline")}>
         <CreateRoomCard onCreate={createRoom} onJoin={() => setJoinOpen(true)} />
       </Section>
 
@@ -67,7 +97,7 @@ export function HomeScreen({ onOpenRoom }: HomeScreenProps) {
       <Modal
         open={joinOpen}
         onOpenChange={setJoinOpen}
-        header={<Modal.Header>Войти по коду</Modal.Header>}
+        header={<Modal.Header>{t("joinByCodeTitle")}</Modal.Header>}
         overlayComponent={<ModalBackdrop />}
         style={{ backgroundColor: "var(--tg-theme-secondary-bg-color, #232e3c)" }}
       >
@@ -76,17 +106,18 @@ export function HomeScreen({ onOpenRoom }: HomeScreenProps) {
             <StickerPlayer id="invite" size={96} />
           </div>
           <Input
-            header="Код комнаты"
-            placeholder="Например, AB12CD"
+            header={t("roomCode")}
+            placeholder={t("roomCodePlaceholder")}
             value={joinCode}
             onChange={(event) => setJoinCode(event.target.value)}
           />
           <Button stretched size="l" disabled={!joinCode.trim()} onClick={joinRoom}>
-            Войти
+            {t("join")}
           </Button>
         </div>
       </Modal>
 
+      <FriendsPanel open={friendsOpen} onOpenChange={setFriendsOpen} />
       <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
     </List>
   );

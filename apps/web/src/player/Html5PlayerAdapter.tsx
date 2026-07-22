@@ -27,6 +27,10 @@ export const Html5PlayerAdapter = forwardRef<PlayerHandle, Html5PlayerAdapterPro
           return Number.isFinite(duration) ? (duration as number) : 0;
         },
         isPaused: () => videoRef.current?.paused ?? true,
+        getVolume: () => videoRef.current?.volume ?? 1,
+        setVolume: (volume) => {
+          if (videoRef.current) videoRef.current.volume = Math.min(1, Math.max(0, volume));
+        },
         requestPictureInPicture: () => {
           void videoRef.current?.requestPictureInPicture?.();
         },

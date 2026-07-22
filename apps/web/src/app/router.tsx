@@ -9,6 +9,7 @@ import { HomeScreen } from "../screens/Home/HomeScreen";
 const RoomScreen = lazy(() => import("../screens/Room/RoomScreen").then((m) => ({ default: m.RoomScreen })));
 
 const START_PARAM_ROOM_PREFIX = "room_";
+const START_PARAM_ADD_FRIEND_PREFIX = "addfriend_";
 
 /** Lets a shared room link (`t.me/<bot>?startapp=room_XXXX`) open straight into that room. */
 function readRoomIdFromStartParam(startParam: string | undefined): string | null {
@@ -16,9 +17,17 @@ function readRoomIdFromStartParam(startParam: string | undefined): string | null
   return startParam.slice(START_PARAM_ROOM_PREFIX.length).toUpperCase();
 }
 
+/** Lets a personal "add me" link (`t.me/<bot>?startapp=addfriend_<userId>`) auto-add the friendship on open. */
+function readFriendIdFromStartParam(startParam: string | undefined): number | null {
+  if (!startParam?.startsWith(START_PARAM_ADD_FRIEND_PREFIX)) return null;
+  const id = Number(startParam.slice(START_PARAM_ADD_FRIEND_PREFIX.length));
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
 export function AppRouter() {
   const { startParam } = useLaunchParams();
   const [roomId, setRoomId] = useState<string | null>(() => readRoomIdFromStartParam(startParam));
+  const [autoAddFriendId] = useState<number | null>(() => readFriendIdFromStartParam(startParam));
 
   const openRoom = useCallback((id: string) => setRoomId(id), []);
   const goHome = useCallback(() => setRoomId(null), []);
@@ -36,5 +45,5 @@ export function AppRouter() {
       </Suspense>
     );
   }
-  return <HomeScreen onOpenRoom={openRoom} />;
+  return <HomeScreen onOpenRoom={openRoom} autoAddFriendId={autoAddFriendId} />;
 }

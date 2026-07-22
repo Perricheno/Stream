@@ -17,6 +17,7 @@ import {
   toParticipants,
   toStatePayload,
 } from "../rooms/RoomStore";
+import { getProfile } from "../db/userRepository";
 import type { RoomMember } from "../rooms/roomTypes";
 import type { SocketData } from "./types";
 
@@ -67,12 +68,14 @@ export function registerSocketHandlers(io: StreamServer): void {
       }
 
       const room = getOrCreateRoom(roomId);
-      const member: RoomMember = payload.hideProfile
+      const profile = getProfile(socket.data.user.id);
+      const hideProfile = profile?.hideProfile ?? false;
+      const member: RoomMember = hideProfile
         ? { socketId: socket.id, userId: socket.data.user.id, firstName: "Аноним" }
         : {
             socketId: socket.id,
             userId: socket.data.user.id,
-            firstName: payload.displayName?.trim() || socket.data.user.firstName,
+            firstName: profile?.displayName?.trim() || socket.data.user.firstName,
             photoUrl: socket.data.user.photoUrl,
           };
       addMember(room, member);
@@ -117,6 +120,20 @@ export function registerSocketHandlers(io: StreamServer): void {
       };
       addChatMessage(room, message);
       io.to(currentRoomId).emit("chat:message", message);
+    });
+
+    socket.on("room:kick", ({ targetUserId }) => {
+      if (!currentRoomId) return;
+      const room = getRoom(currentRoomId);
+      if (!room || room.hostSocketId !== socket.id) return; // host-only
+
+      const target = room.members.find((m) => m.userId === targetUserId);
+      if (!target || target.socketId === socket.id) return;
+
+      removeMember(room, target.socketId);
+      io.to(target.socketId).emit("room:kicked");
+      io.sockets.sockets.get(target.socketId)?.leave(currentRoomId);
+      io.to(currentRoomId).emit("room:participants", toParticipants(room));
     });
 
     socket.on("disconnect", leaveCurrentRoom);

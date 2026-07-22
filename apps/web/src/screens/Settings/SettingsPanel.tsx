@@ -1,5 +1,7 @@
-import { Cell, Input, List, Modal, Section, Switch } from "@telegram-apps/telegram-ui";
-import { useUserSettings } from "../../telegram/useUserSettings";
+import { Cell, Input, List, Modal, SegmentedControl, Section, Switch } from "@telegram-apps/telegram-ui";
+import type { AppLanguage } from "@stream/shared";
+import { useProfile } from "../../telegram/ProfileContext";
+import { useTranslation } from "../../i18n/useTranslation";
 import { ModalBackdrop } from "../../components/ModalBackdrop";
 
 interface SettingsPanelProps {
@@ -8,36 +10,78 @@ interface SettingsPanelProps {
 }
 
 export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
-  const { settings, updateSettings } = useUserSettings();
+  const { profile, updateProfile } = useProfile();
+  const { t } = useTranslation();
+
+  if (!profile) return null;
 
   return (
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      header={<Modal.Header>Настройки</Modal.Header>}
+      header={<Modal.Header>{t("settings")}</Modal.Header>}
       overlayComponent={<ModalBackdrop />}
       style={{ backgroundColor: "var(--tg-theme-secondary-bg-color, #232e3c)" }}
     >
       <List>
-        <Section header="Профиль в комнате" footer="Применяется во всех комнатах, которые вы создаёте или к которым присоединяетесь">
+        <Section header={t("profileInRoom")} footer={t("profileInRoomFooter")}>
           <Cell>
             <Input
-              header="Отображаемое имя"
-              placeholder="Имя из Telegram"
-              value={settings.displayName}
-              onChange={(event) => updateSettings({ displayName: event.target.value })}
+              header={t("displayName")}
+              placeholder={t("displayNamePlaceholder")}
+              value={profile.displayName}
+              onChange={(event) => updateProfile({ displayName: event.target.value })}
             />
           </Cell>
           <Cell
             after={
               <Switch
-                checked={settings.hideProfile}
-                onChange={(event) => updateSettings({ hideProfile: event.target.checked })}
+                checked={profile.hideProfile}
+                onChange={(event) => updateProfile({ hideProfile: event.target.checked })}
               />
             }
-            subtitle="Другие участники увидят вас как «Аноним», без имени и фото"
+            subtitle={t("hideProfileSubtitle")}
           >
-            Скрыть профиль от других
+            {t("hideProfile")}
+          </Cell>
+        </Section>
+
+        <Section header={t("notificationsSection")}>
+          <Cell
+            after={
+              <Switch
+                checked={profile.notificationsEnabled}
+                onChange={(event) => updateProfile({ notificationsEnabled: event.target.checked })}
+              />
+            }
+            subtitle={t("notificationsSubtitle")}
+          >
+            {t("notificationsEnabled")}
+          </Cell>
+        </Section>
+
+        <Section header={t("playerSection")}>
+          <Cell
+            after={<Switch checked={profile.autoplay} onChange={(event) => updateProfile({ autoplay: event.target.checked })} />}
+            subtitle={t("autoplaySubtitle")}
+          >
+            {t("autoplay")}
+          </Cell>
+        </Section>
+
+        <Section header={t("languageSection")}>
+          <Cell>
+            <SegmentedControl>
+              {(["ru", "en"] as AppLanguage[]).map((lang) => (
+                <SegmentedControl.Item
+                  key={lang}
+                  selected={profile.language === lang}
+                  onClick={() => updateProfile({ language: lang })}
+                >
+                  {lang === "ru" ? t("languageRu") : t("languageEn")}
+                </SegmentedControl.Item>
+              ))}
+            </SegmentedControl>
           </Cell>
         </Section>
       </List>

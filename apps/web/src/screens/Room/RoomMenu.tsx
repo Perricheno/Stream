@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Cell, IconButton, List, Modal } from "@telegram-apps/telegram-ui";
+import { useTranslation } from "../../i18n/useTranslation";
 import { ModalBackdrop } from "../../components/ModalBackdrop";
 
 function DotsIcon() {
@@ -17,21 +18,23 @@ interface RoomMenuProps {
   hasSource: boolean;
   onChangeSource: () => void;
   onOpenSettings: () => void;
+  onInviteFriend: () => void;
   onLeave: () => void;
 }
 
-export function RoomMenu({ onShare, hasSource, onChangeSource, onOpenSettings, onLeave }: RoomMenuProps) {
+export function RoomMenu({ onShare, hasSource, onChangeSource, onOpenSettings, onInviteFriend, onLeave }: RoomMenuProps) {
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
 
   return (
     <>
-      <IconButton mode="plain" size="m" onClick={() => setOpen(true)} aria-label="Меню">
+      <IconButton mode="plain" size="m" onClick={() => setOpen(true)} aria-label={t("menu")}>
         <DotsIcon />
       </IconButton>
       <Modal
         open={open}
         onOpenChange={setOpen}
-        header={<Modal.Header>Меню</Modal.Header>}
+        header={<Modal.Header>{t("menu")}</Modal.Header>}
         overlayComponent={<ModalBackdrop />}
         style={{ backgroundColor: "var(--tg-theme-secondary-bg-color, #232e3c)" }}
       >
@@ -42,7 +45,15 @@ export function RoomMenu({ onShare, hasSource, onChangeSource, onOpenSettings, o
               onShare();
             }}
           >
-            Поделиться комнатой
+            {t("shareRoom")}
+          </Cell>
+          <Cell
+            onClick={() => {
+              setOpen(false);
+              onInviteFriend();
+            }}
+          >
+            {t("inviteToRoom")}
           </Cell>
           {hasSource && (
             <Cell
@@ -51,7 +62,7 @@ export function RoomMenu({ onShare, hasSource, onChangeSource, onOpenSettings, o
                 onChangeSource();
               }}
             >
-              Сменить видео
+              {t("changeVideo")}
             </Cell>
           )}
           <Cell
@@ -60,7 +71,7 @@ export function RoomMenu({ onShare, hasSource, onChangeSource, onOpenSettings, o
               onOpenSettings();
             }}
           >
-            Настройки
+            {t("settings")}
           </Cell>
           <Cell
             style={{ color: "var(--tg-theme-destructive-text-color, #ec3942)" }}
@@ -69,7 +80,7 @@ export function RoomMenu({ onShare, hasSource, onChangeSource, onOpenSettings, o
               onLeave();
             }}
           >
-            Покинуть комнату
+            {t("leaveRoom")}
           </Cell>
         </List>
       </Modal>

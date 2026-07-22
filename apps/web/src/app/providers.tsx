@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { AppRoot } from "@telegram-apps/telegram-ui";
 import { useLaunchParams } from "@telegram-apps/sdk-react";
 import { useTelegramAppearance } from "../telegram/useTelegramTheme";
+import { ProfileProvider } from "../telegram/ProfileContext";
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const appearance = useTelegramAppearance();
@@ -9,7 +10,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <AppRoot appearance={appearance} platform={platform === "ios" ? "ios" : "base"}>
-      {children}
+      <ProfileProvider>{children}</ProfileProvider>
     </AppRoot>
   );
 }

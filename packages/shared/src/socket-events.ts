@@ -10,10 +10,6 @@ export interface JoinRoomResult {
 
 export interface JoinRoomPayload {
   roomId: string;
-  /** Room-scoped display name override; empty/omitted uses the Telegram first name. */
-  displayName?: string;
-  /** If true, this participant is shown to others as "Аноним" with no photo. */
-  hideProfile?: boolean;
 }
 
 export interface PlaybackActionPayload {
@@ -29,6 +25,8 @@ export interface ClientToServerEvents {
   "playback:seek": (payload: PlaybackActionPayload) => void;
   "playback:change-source": (payload: { source: VideoSource }) => void;
   "chat:send": (payload: { text: string }) => void;
+  /** Host-only; the server ignores this from anyone else. */
+  "room:kick": (payload: { targetUserId: number }) => void;
 }
 
 export interface ServerToClientEvents {
@@ -38,4 +36,6 @@ export interface ServerToClientEvents {
   "playback:source-changed": (payload: { source: VideoSource }) => void;
   "chat:message": (message: ChatMessage) => void;
   "room:error": (payload: { code: string; message: string }) => void;
+  /** Sent only to the removed participant. */
+  "room:kicked": () => void;
 }

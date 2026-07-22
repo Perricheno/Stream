@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { CHAT_HISTORY_LIMIT, type ChatMessage, type Participant, type RoomStatePayload, type VideoSource } from "@stream/shared";
 import { socket } from "./socketClient";
 
-export type RoomConnectionStatus = "idle" | "connecting" | "joined" | "error";
+export type RoomConnectionStatus = "idle" | "connecting" | "joined" | "error" | "kicked";
 
 export interface RoomSocketState {
   status: RoomConnectionStatus;
@@ -10,17 +10,15 @@ export interface RoomSocketState {
   error: string | null;
 }
 
-export interface RoomProfile {
-  displayName?: string;
-  hideProfile?: boolean;
-}
-
-/** Connects to the room's socket namespace, joins `roomId`, and keeps `room` in sync. */
-export function useRoomSocket(roomId: string | undefined, profile?: RoomProfile): RoomSocketState {
+/**
+ * Connects to the room's socket namespace, joins `roomId`, and keeps `room`
+ * in sync. The joining user's display name/visibility come from their
+ * server-side profile (see apps/server's db/userRepository.ts), looked up
+ * during `room:join` — nothing profile-related needs to be sent from here.
+ */
+export function useRoomSocket(roomId: string | undefined): RoomSocketState {
   const [state, setState] = useState<RoomSocketState>({ status: "idle", room: null, error: null });
   const joinedRoomRef = useRef<string | null>(null);
-  const profileRef = useRef(profile);
-  profileRef.current = profile;
 
   useEffect(() => {
     if (!roomId) return;
@@ -47,6 +45,10 @@ export function useRoomSocket(roomId: string | undefined, profile?: RoomProfile)
     const onError = (payload: { code: string; message: string }) => {
       setState({ status: "error", room: null, error: payload.message });
     };
+    const onKicked = () => {
+      joinedRoomRef.current = null;
+      setState({ status: "kicked", room: null, error: null });
+    };
     let lastConnectErrorMessage = "";
     const onConnectError = (err: Error) => {
       lastConnectErrorMessage = err.message;
@@ -66,21 +68,18 @@ export function useRoomSocket(roomId: string | undefined, profile?: RoomProfile)
     socket.on("playback:source-changed", onSourceChanged);
     socket.on("chat:message", onChatMessage);
     socket.on("room:error", onError);
+    socket.on("room:kicked", onKicked);
     socket.on("connect_error", onConnectError);
     socket.io.on("reconnect_failed", onReconnectFailed);
 
-    socket.emit(
-      "room:join",
-      { roomId, displayName: profileRef.current?.displayName, hideProfile: profileRef.current?.hideProfile },
-      (res) => {
-        if (res.ok && res.state) {
-          joinedRoomRef.current = roomId;
-          setState({ status: "joined", room: res.state, error: null });
-        } else {
-          setState({ status: "error", room: null, error: res.error ?? "Failed to join room" });
-        }
-      },
-    );
+    socket.emit("room:join", { roomId }, (res) => {
+      if (res.ok && res.state) {
+        joinedRoomRef.current = roomId;
+        setState({ status: "joined", room: res.state, error: null });
+      } else {
+        setState({ status: "error", room: null, error: res.error ?? "Failed to join room" });
+      }
+    });
 
     return () => {
       socket.off("room:state", onRoomState);
@@ -88,6 +87,7 @@ export function useRoomSocket(roomId: string | undefined, profile?: RoomProfile)
       socket.off("playback:source-changed", onSourceChanged);
       socket.off("chat:message", onChatMessage);
       socket.off("room:error", onError);
+      socket.off("room:kicked", onKicked);
       socket.off("connect_error", onConnectError);
       socket.io.off("reconnect_failed", onReconnectFailed);
       if (joinedRoomRef.current) {
