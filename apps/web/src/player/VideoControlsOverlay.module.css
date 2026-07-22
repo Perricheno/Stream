@@ -1,21 +1,41 @@
 .overlay {
   position: absolute;
   inset: 0;
+  z-index: 5;
+  /* Forces its own compositing layer. Without this, iOS/WebKit sometimes
+     paints a cross-origin iframe (the YouTube embed) above sibling
+     elements regardless of DOM order or z-index, swallowing all taps. */
+  transform: translateZ(0);
   display: flex;
   align-items: center;
   justify-content: center;
+  touch-action: manipulation;
 }
 
 .scrim {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0) 35%, rgba(0, 0, 0, 0) 70%, rgba(0, 0, 0, 0.35) 100%);
-  opacity: 0;
   transition: opacity 0.2s ease;
   pointer-events: none;
 }
 .scrim[data-visible="true"] {
   opacity: 1;
+}
+/* While actually playing, only darken the top/bottom edges so the video
+   shows through in the middle. Before that — paused, buffering, or the
+   video simply hasn't started (autoplay is routinely blocked by the
+   browser for unmuted video) — go fully opaque instead: YouTube renders
+   its own title/channel-name branding over a not-yet-playing video, and
+   since that's inside a cross-origin iframe we can't reach with CSS, a
+   transparent middle would let it bleed straight through our controls. */
+.scrim[data-playing="true"] {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0) 35%, rgba(0, 0, 0, 0) 70%, rgba(0, 0, 0, 0.35) 100%);
+}
+.scrim[data-playing="false"] {
+  opacity: 1;
+  /* Fully solid, not just dimmed — any transparency still lets YouTube's
+     bright white title text show through legibly underneath. */
+  background: #000;
 }
 
 .controlsGroup {
@@ -35,8 +55,8 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 56px;
-  height: 56px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   border: none;
   background: rgba(0, 0, 0, 0.45);
@@ -44,6 +64,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .bottomBar {
@@ -53,32 +75,77 @@
   bottom: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 2px;
+  padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px));
 }
 
 .time {
   color: #fff;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  min-width: 36px;
+  min-width: 34px;
+  text-align: center;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  flex-shrink: 0;
 }
 
 .seekBar {
   flex: 1;
-  accent-color: var(--tg-theme-button-color, #5288c1);
-  height: 20px;
+  margin: 0 4px;
+  height: 44px;
+  /* Custom track so the visual bar stays thin while the tappable/draggable
+     area is the full 44pt Apple recommends for touch targets. */
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  touch-action: none;
+}
+.seekBar::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.35);
+}
+.seekBar::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  background: var(--tg-theme-button-color, #5288c1);
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.25);
+}
+.seekBar::-moz-range-track {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.35);
+}
+.seekBar::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: var(--tg-theme-button-color, #5288c1);
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.25);
 }
 
 .iconButton {
   border: none;
   background: transparent;
   color: #fff;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.speedButton {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }

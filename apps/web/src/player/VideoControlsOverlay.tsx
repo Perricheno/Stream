@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PlayerHandle } from "./playerTypes";
+import { PLAYBACK_SPEEDS, type PlayerHandle } from "./playerTypes";
 import type { PlayerProgress } from "./usePlayerProgress";
 import styles from "./VideoControlsOverlay.module.css";
+
+function formatSpeed(rate: number): string {
+  return `${rate}×`;
+}
 
 const AUTO_HIDE_MS = 2500;
 
@@ -80,6 +84,7 @@ export function VideoControlsOverlay({ playerRef, progress, isFullscreen, onTogg
   const [visible, setVisible] = useState(true);
   const [dragValue, setDragValue] = useState<number | null>(null);
   const [isMuted, setIsMuted] = useState(false);
+  const [speedIndex, setSpeedIndex] = useState(PLAYBACK_SPEEDS.indexOf(1));
   const lastVolumeRef = useRef(1);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>();
 
@@ -119,6 +124,13 @@ export function VideoControlsOverlay({ playerRef, progress, isFullscreen, onTogg
     showControls();
   }, [playerRef, showControls]);
 
+  const cycleSpeed = useCallback(() => {
+    const nextIndex = (speedIndex + 1) % PLAYBACK_SPEEDS.length;
+    setSpeedIndex(nextIndex);
+    playerRef.current?.setPlaybackRate(PLAYBACK_SPEEDS[nextIndex]);
+    showControls();
+  }, [speedIndex, playerRef, showControls]);
+
   const toggleMute = useCallback(() => {
     const player = playerRef.current;
     if (!player) return;
@@ -138,7 +150,7 @@ export function VideoControlsOverlay({ playerRef, progress, isFullscreen, onTogg
 
   return (
     <div className={styles.overlay} onPointerDown={showControls}>
-      <div className={styles.scrim} data-visible={visible} />
+      <div className={styles.scrim} data-visible={visible} data-playing={progress.isPlaying} />
       <div className={styles.controlsGroup} data-visible={visible}>
         <button type="button" className={styles.playButton} onClick={togglePlayPause} aria-label="Play/Pause">
           {progress.isPlaying ? <PauseIcon /> : <PlayIcon />}
@@ -161,6 +173,14 @@ export function VideoControlsOverlay({ playerRef, progress, isFullscreen, onTogg
             }}
           />
           <span className={styles.time}>{formatTime(progress.duration)}</span>
+          <button
+            type="button"
+            className={`${styles.iconButton} ${styles.speedButton}`}
+            onClick={cycleSpeed}
+            aria-label="Скорость воспроизведения"
+          >
+            {formatSpeed(PLAYBACK_SPEEDS[speedIndex])}
+          </button>
           <button
             type="button"
             className={styles.iconButton}

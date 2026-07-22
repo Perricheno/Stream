@@ -11,7 +11,7 @@ interface YouTubePlayerAdapterProps extends PlayerAdapterEvents {
 let instanceCounter = 0;
 
 export const YouTubePlayerAdapter = forwardRef<PlayerHandle, YouTubePlayerAdapterProps>(
-  function YouTubePlayerAdapter({ videoId, suppressed, onPlay, onPause, onSeek }, ref) {
+  function YouTubePlayerAdapter({ videoId, suppressed, onPlay, onPause, onSeek, onEnded }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const playerRef = useRef<YT.Player | null>(null);
     const elementId = useRef(`yt-player-${++instanceCounter}`);
@@ -28,6 +28,8 @@ export const YouTubePlayerAdapter = forwardRef<PlayerHandle, YouTubePlayerAdapte
         isPaused: () => playerRef.current?.getPlayerState() !== window.YT?.PlayerState.PLAYING,
         getVolume: () => (playerRef.current ? playerRef.current.getVolume() / 100 : 1),
         setVolume: (volume) => playerRef.current?.setVolume(Math.round(Math.min(1, Math.max(0, volume)) * 100)),
+        getPlaybackRate: () => playerRef.current?.getPlaybackRate() ?? 1,
+        setPlaybackRate: (rate) => playerRef.current?.setPlaybackRate(rate),
       }),
       [],
     );
@@ -63,6 +65,7 @@ export const YouTubePlayerAdapter = forwardRef<PlayerHandle, YouTubePlayerAdapte
               if (suppressed.current) return;
               if (event.data === YT.PlayerState.PLAYING) onPlay(atSeconds);
               else if (event.data === YT.PlayerState.PAUSED) onPause(atSeconds);
+              else if (event.data === YT.PlayerState.ENDED) onEnded();
             },
           },
         });

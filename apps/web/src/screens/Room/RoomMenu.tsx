@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Cell, IconButton, List, Modal } from "@telegram-apps/telegram-ui";
 import { useTranslation } from "../../i18n/useTranslation";
+import { useFullscreen } from "../../telegram/useFullscreen";
 import { ModalBackdrop } from "../../components/ModalBackdrop";
 
 function DotsIcon() {
@@ -19,12 +20,24 @@ interface RoomMenuProps {
   onChangeSource: () => void;
   onOpenSettings: () => void;
   onInviteFriend: () => void;
+  onOpenQueue: () => void;
+  queueCount: number;
   onLeave: () => void;
 }
 
-export function RoomMenu({ onShare, hasSource, onChangeSource, onOpenSettings, onInviteFriend, onLeave }: RoomMenuProps) {
+export function RoomMenu({
+  onShare,
+  hasSource,
+  onChangeSource,
+  onOpenSettings,
+  onInviteFriend,
+  onOpenQueue,
+  queueCount,
+  onLeave,
+}: RoomMenuProps) {
   const [open, setOpen] = useState(false);
   const { t } = useTranslation();
+  const fullscreen = useFullscreen();
 
   return (
     <>
@@ -66,6 +79,19 @@ export function RoomMenu({ onShare, hasSource, onChangeSource, onOpenSettings, o
             </Cell>
           )}
           <Cell
+            after={
+              queueCount > 0 ? (
+                <span style={{ color: "var(--tg-theme-hint-color, #708499)", fontSize: 15 }}>{queueCount}</span>
+              ) : undefined
+            }
+            onClick={() => {
+              setOpen(false);
+              onOpenQueue();
+            }}
+          >
+            {t("queue")}
+          </Cell>
+          <Cell
             onClick={() => {
               setOpen(false);
               onOpenSettings();
@@ -73,6 +99,16 @@ export function RoomMenu({ onShare, hasSource, onChangeSource, onOpenSettings, o
           >
             {t("settings")}
           </Cell>
+          {fullscreen.isSupported && (
+            <Cell
+              onClick={() => {
+                setOpen(false);
+                fullscreen.toggle();
+              }}
+            >
+              {fullscreen.isFullscreen ? t("exitFullscreen") : t("enterFullscreen")}
+            </Cell>
+          )}
           <Cell
             style={{ color: "var(--tg-theme-destructive-text-color, #ec3942)" }}
             onClick={() => {

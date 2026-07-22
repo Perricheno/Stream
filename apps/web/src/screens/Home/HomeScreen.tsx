@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, IconButton, Input, List, Modal, Section } from "@telegram-apps/telegram-ui";
+import { Button, Cell, IconButton, Input, List, Modal, Section } from "@telegram-apps/telegram-ui";
 import { useHapticFeedback } from "../../telegram/useHapticFeedback";
 import { useRecentRooms } from "../../telegram/useRecentRooms";
 import { useFriends } from "../../telegram/useFriends";
+import { useFullscreen } from "../../telegram/useFullscreen";
+import { useHomeScreenPrompt } from "../../telegram/useHomeScreenPrompt";
 import { useTranslation } from "../../i18n/useTranslation";
 import { StickerPlayer } from "../../stickers/StickerPlayer";
 import { ServiceStatusIndicator } from "../../status/ServiceStatusIndicator";
@@ -28,6 +30,30 @@ function PeopleIcon() {
   );
 }
 
+function ExpandIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M4 9V4h5v2H6v3H4zm0 6h2v3h3v2H4v-5zm16-6h-2V6h-3V4h5v5zm-2 6h2v5h-5v-2h3v-3z" />
+    </svg>
+  );
+}
+
+function CollapseIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M9 4H7v3H4v2h5V4zm6 0v5h5V7h-3V4h-2zM4 15v2h3v3h2v-5H4zm11 5h2v-3h3v-2h-5v5z" />
+    </svg>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2a5 5 0 0 0-5 5c0 2.5 2 4.9 3 6.6V21a2 2 0 0 0 4 0v-7.4c1-1.7 3-4.1 3-6.6a5 5 0 0 0-5-5zm0 7a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" />
+    </svg>
+  );
+}
+
 function generateRoomId(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
@@ -42,6 +68,8 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
   const { addFriend } = useFriends();
   const haptics = useHapticFeedback();
   const { t } = useTranslation();
+  const fullscreen = useFullscreen();
+  const homeScreenPrompt = useHomeScreenPrompt();
   const [joinOpen, setJoinOpen] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -80,6 +108,16 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
     <List>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, padding: "12px 16px 0" }}>
         <ServiceStatusIndicator />
+        {fullscreen.isSupported && (
+          <IconButton
+            mode="plain"
+            size="m"
+            onClick={fullscreen.toggle}
+            aria-label={fullscreen.isFullscreen ? t("exitFullscreen") : t("enterFullscreen")}
+          >
+            {fullscreen.isFullscreen ? <CollapseIcon /> : <ExpandIcon />}
+          </IconButton>
+        )}
         <IconButton mode="plain" size="m" onClick={() => setFriendsOpen(true)} aria-label={t("friends")}>
           <PeopleIcon />
         </IconButton>
@@ -91,6 +129,14 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
       <Section header={t("appTitle")} footer={t("appTagline")}>
         <CreateRoomCard onCreate={createRoom} onJoin={() => setJoinOpen(true)} />
       </Section>
+
+      {homeScreenPrompt.canPrompt && (
+        <Section>
+          <Cell before={<PinIcon />} onClick={homeScreenPrompt.prompt}>
+            {t("addToHomeScreen")}
+          </Cell>
+        </Section>
+      )}
 
       <RecentRoomsList rooms={loaded ? rooms : null} onOpenRoom={onOpenRoom} />
 

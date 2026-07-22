@@ -11,6 +11,8 @@ interface RoomToolbarProps {
   onChangeSource: () => void;
   onOpenSettings: () => void;
   onInviteFriend: () => void;
+  onOpenQueue: () => void;
+  queueCount: number;
   onLeave: () => void;
 }
 
@@ -21,6 +23,8 @@ export function RoomToolbar({
   onChangeSource,
   onOpenSettings,
   onInviteFriend,
+  onOpenQueue,
+  queueCount,
   onLeave,
 }: RoomToolbarProps) {
   const haptics = useHapticFeedback();
@@ -38,7 +42,7 @@ export function RoomToolbar({
         <Caption level="1" style={{ color: "var(--tg-theme-hint-color, #708499)" }}>
           Комната {roomId}
         </Caption>
-        <IconButton mode="plain" size="s" onClick={copyRoomCode} aria-label="Скопировать код комнаты">
+        <IconButton mode="plain" size="m" onClick={copyRoomCode} aria-label="Скопировать код комнаты">
           <Icon20Copy />
         </IconButton>
       </div>
@@ -50,6 +54,8 @@ export function RoomToolbar({
           onChangeSource={onChangeSource}
           onOpenSettings={onOpenSettings}
           onInviteFriend={onInviteFriend}
+          onOpenQueue={onOpenQueue}
+          queueCount={queueCount}
           onLeave={onLeave}
         />
       </div>

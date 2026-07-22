@@ -1,4 +1,5 @@
 import type { ChatMessage } from "./chat";
+import type { QueueItem } from "./queue";
 import type { Participant, RoomStatePayload, VideoSource } from "./room";
 import type { PlaybackSyncPayload } from "./sync";
 
@@ -27,6 +28,12 @@ export interface ClientToServerEvents {
   "chat:send": (payload: { text: string }) => void;
   /** Host-only; the server ignores this from anyone else. */
   "room:kick": (payload: { targetUserId: number }) => void;
+  /** Anyone in the room can queue up a video. */
+  "queue:add": (payload: { source: VideoSource }) => void;
+  /** Host-only; the server ignores this from anyone else. */
+  "queue:remove": (payload: { itemId: string }) => void;
+  /** Host-only; pops the front of the queue into `source`. No-ops if the queue is empty. */
+  "queue:advance": () => void;
 }
 
 export interface ServerToClientEvents {
@@ -38,4 +45,5 @@ export interface ServerToClientEvents {
   "room:error": (payload: { code: string; message: string }) => void;
   /** Sent only to the removed participant. */
   "room:kicked": () => void;
+  "queue:updated": (payload: { queue: QueueItem[] }) => void;
 }

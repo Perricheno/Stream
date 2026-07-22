@@ -1,4 +1,11 @@
-import { CHAT_HISTORY_LIMIT, type ChatMessage, type Participant, type RoomStatePayload } from "@stream/shared";
+import {
+  CHAT_HISTORY_LIMIT,
+  QUEUE_MAX_LENGTH,
+  type ChatMessage,
+  type Participant,
+  type QueueItem,
+  type RoomStatePayload,
+} from "@stream/shared";
 import type { Room, RoomMember } from "./roomTypes";
 
 /** In-memory only — rooms are ephemeral and reset on server restart (see README). */
@@ -11,7 +18,15 @@ function initialPlayback() {
 export function getOrCreateRoom(roomId: string): Room {
   let room = rooms.get(roomId);
   if (!room) {
-    room = { id: roomId, hostSocketId: "", source: null, playback: initialPlayback(), members: [], messages: [] };
+    room = {
+      id: roomId,
+      hostSocketId: "",
+      source: null,
+      playback: initialPlayback(),
+      members: [],
+      messages: [],
+      queue: [],
+    };
     rooms.set(roomId, room);
   }
   return room;
@@ -26,9 +41,16 @@ export function getRoomCount(): number {
 }
 
 export function addMember(room: Room, member: RoomMember): void {
+  // A reconnect gets a fresh socket id, so if this user was already the host
+  // under their previous connection, carry host status forward — otherwise
+  // `hostSocketId` would keep pointing at a now-dead socket and they'd
+  // silently lose host controls on every reconnect.
+  const wasHost = room.hostSocketId !== "" && room.members.some(
+    (existing) => existing.userId === member.userId && existing.socketId === room.hostSocketId,
+  );
   room.members = room.members.filter((existing) => existing.userId !== member.userId);
   room.members.push(member);
-  if (!room.hostSocketId) room.hostSocketId = member.socketId;
+  if (!room.hostSocketId || wasHost) room.hostSocketId = member.socketId;
 }
 
 /** Removes a member by socket id. Promotes the next member to host if the host left, and drops the room once empty. */
@@ -58,6 +80,7 @@ export function toStatePayload(room: Room): RoomStatePayload {
     playback: room.playback,
     participants: toParticipants(room),
     messages: room.messages,
+    queue: room.queue,
   };
 }
 
@@ -67,4 +90,24 @@ export function addChatMessage(room: Room, message: ChatMessage): void {
   if (room.messages.length > CHAT_HISTORY_LIMIT) {
     room.messages.splice(0, room.messages.length - CHAT_HISTORY_LIMIT);
   }
+}
+
+/** Appends a queue item, capping length so a room can't be griefed into an unbounded queue. */
+export function addQueueItem(room: Room, item: QueueItem): boolean {
+  if (room.queue.length >= QUEUE_MAX_LENGTH) return false;
+  room.queue.push(item);
+  return true;
+}
+
+export function removeQueueItem(room: Room, itemId: string): void {
+  room.queue = room.queue.filter((item) => item.id !== itemId);
+}
+
+/** Pops the front of the queue as the new source + resets playback. Returns false if the queue was empty. */
+export function advanceQueue(room: Room): boolean {
+  const next = room.queue.shift();
+  if (!next) return false;
+  room.source = next.source;
+  room.playback = initialPlayback();
+  return true;
 }

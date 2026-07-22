@@ -10,7 +10,7 @@ interface Html5PlayerAdapterProps extends PlayerAdapterEvents {
 }
 
 export const Html5PlayerAdapter = forwardRef<PlayerHandle, Html5PlayerAdapterProps>(
-  function Html5PlayerAdapter({ source, suppressed, onPlay, onPause, onSeek }, ref) {
+  function Html5PlayerAdapter({ source, suppressed, onPlay, onPause, onSeek, onEnded }, ref) {
     const videoRef = useRef<HTMLVideoElement>(null);
 
     useImperativeHandle(
@@ -33,6 +33,10 @@ export const Html5PlayerAdapter = forwardRef<PlayerHandle, Html5PlayerAdapterPro
         },
         requestPictureInPicture: () => {
           void videoRef.current?.requestPictureInPicture?.();
+        },
+        getPlaybackRate: () => videoRef.current?.playbackRate ?? 1,
+        setPlaybackRate: (rate) => {
+          if (videoRef.current) videoRef.current.playbackRate = rate;
         },
       }),
       [],
@@ -66,16 +70,19 @@ export const Html5PlayerAdapter = forwardRef<PlayerHandle, Html5PlayerAdapterPro
       const handleSeeked = () => {
         if (!suppressed.current) onSeek(video.currentTime);
       };
+      const handleEnded = () => onEnded();
 
       video.addEventListener("play", handlePlay);
       video.addEventListener("pause", handlePause);
       video.addEventListener("seeked", handleSeeked);
+      video.addEventListener("ended", handleEnded);
       return () => {
         video.removeEventListener("play", handlePlay);
         video.removeEventListener("pause", handlePause);
         video.removeEventListener("seeked", handleSeeked);
+        video.removeEventListener("ended", handleEnded);
       };
-    }, [onPlay, onPause, onSeek, suppressed]);
+    }, [onPlay, onPause, onSeek, onEnded, suppressed]);
 
     return <video ref={videoRef} playsInline className={styles.fill} />;
   },

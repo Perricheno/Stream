@@ -1,4 +1,4 @@
-import type { ChatMessage, PlaybackState, VideoSource } from "@stream/shared";
+import type { ChatMessage, PlaybackState, QueueItem, VideoSource } from "@stream/shared";
 
 export interface RoomMember {
   socketId: string;
@@ -14,4 +14,5 @@ export interface Room {
   playback: PlaybackState;
   members: RoomMember[];
   messages: ChatMessage[];
+  queue: QueueItem[];
 }

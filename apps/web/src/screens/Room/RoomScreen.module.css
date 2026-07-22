@@ -1,0 +1,27 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  /* Telegram resizes this CSS var when the on-screen keyboard opens, which
+     is exactly what we want here — it keeps the chat input pinned above
+     the keyboard instead of hiding behind it. 100dvh is the dev/browser
+     fallback outside real Telegram. */
+  height: var(--tg-viewport-height, 100dvh);
+  overflow: hidden;
+  background: var(--tg-theme-bg-color, #17212b);
+  /* Guards against notch/rounded-corner clipping in landscape fullscreen. */
+  padding-left: var(--tg-viewport-safe-area-inset-left, 0px);
+  padding-right: var(--tg-viewport-safe-area-inset-right, 0px);
+}
+
+.top {
+  flex-shrink: 0;
+}
+
+.videoArea {
+  padding: 12px 16px;
+}
+
+.chatFill {
+  flex: 1;
+  min-height: 0;
+}

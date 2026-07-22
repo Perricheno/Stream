@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { List, Placeholder } from "@telegram-apps/telegram-ui";
+import { Placeholder, Snackbar } from "@telegram-apps/telegram-ui";
 import { shareURL } from "@telegram-apps/sdk-react";
 import type { VideoSource } from "@stream/shared";
 import { useBackButton } from "../../telegram/useBackButton";
@@ -7,6 +7,7 @@ import { useHapticFeedback } from "../../telegram/useHapticFeedback";
 import { useTelegramUser } from "../../telegram/useInitData";
 import { useProfile } from "../../telegram/ProfileContext";
 import { confirmAction } from "../../telegram/confirmAction";
+import { useTranslation } from "../../i18n/useTranslation";
 import { useRoomSocket } from "../../socket/useRoomSocket";
 import { socket } from "../../socket/socketClient";
 import { useSyncedPlayback } from "../../player/useSyncedPlayback";
@@ -16,8 +17,11 @@ import { SettingsPanel } from "../Settings/SettingsPanel";
 import { FriendsPanel } from "../Friends/FriendsPanel";
 import { ParticipantsBar } from "./ParticipantsBar";
 import { VideoSourcePicker } from "./VideoSourcePicker";
+import { QueuePanel } from "./QueuePanel";
+import { parseVideoUrl } from "./parseVideoUrl";
 import { RoomToolbar } from "./RoomToolbar";
 import { ChatPanel } from "./ChatPanel";
+import styles from "./RoomScreen.module.css";
 
 const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME as string | undefined;
 
@@ -29,14 +33,36 @@ interface RoomScreenProps {
 export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
   const { status, room, error } = useRoomSocket(roomId);
   const { profile } = useProfile();
+  const { t } = useTranslation();
   const haptics = useHapticFeedback();
   const telegramUser = useTelegramUser();
   const synced = useSyncedPlayback(socket, room?.playback ?? null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
   const [pickingSource, setPickingSource] = useState(false);
+  const [hostToast, setHostToast] = useState<string | null>(null);
   const autoplayedSourceRef = useRef<string | null>(null);
   const lastParticipantCountRef = useRef<number | null>(null);
+  const lastHostIdRef = useRef<number | null>(null);
+  const isHostRef = useRef(false);
+  const currentHostId = room?.participants.find((p) => p.isHost)?.userId ?? null;
+  const isHost = currentHostId !== null && currentHostId === telegramUser?.id;
+
+  useEffect(() => {
+    isHostRef.current = isHost;
+  }, [isHost]);
+
+  // Toast when the host changes (e.g. the previous host disconnected and the
+  // server auto-promoted the next participant) — otherwise this could go
+  // unnoticed since nothing else in the UI calls it out.
+  useEffect(() => {
+    const previous = lastHostIdRef.current;
+    lastHostIdRef.current = currentHostId;
+    if (previous === null || previous === currentHostId || currentHostId === null) return;
+    const newHost = room?.participants.find((p) => p.userId === currentHostId);
+    if (newHost) setHostToast(t("hostTransferred").replace("{name}", newHost.firstName));
+  }, [currentHostId, room?.participants, t]);
 
   useEffect(() => {
     if (!room?.source || profile?.autoplay === false) return;
@@ -92,6 +118,22 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
     socket.emit("room:kick", { targetUserId });
   }, []);
 
+  // Only the host's client drives auto-advance — if every participant's
+  // player fired this independently, they'd race to pop the same queue item.
+  const handleEnded = useCallback(() => {
+    if (isHostRef.current) socket.emit("queue:advance");
+  }, []);
+
+  const addToQueue = useCallback((raw: string) => {
+    const source = parseVideoUrl(raw);
+    if (!source) return;
+    socket.emit("queue:add", { source });
+  }, []);
+
+  const removeFromQueue = useCallback((itemId: string) => {
+    socket.emit("queue:remove", { itemId });
+  }, []);
+
   if (status === "idle" || status === "connecting") {
     return (
       <Placeholder header="Подключаемся..." description={`Комната ${roomId}`}>
@@ -116,45 +158,66 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
     );
   }
 
-  const isHost = room.participants.find((p) => p.userId === telegramUser?.id)?.isHost ?? false;
-
   return (
-    <List>
-      <RoomToolbar
-        roomId={roomId}
-        onShare={handleShare}
-        hasSource={Boolean(room.source) && !pickingSource}
-        onChangeSource={() => setPickingSource(true)}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onInviteFriend={() => setFriendsOpen(true)}
-        onLeave={handleBack}
-      />
-      <ParticipantsBar
-        participants={room.participants}
-        currentUserId={telegramUser?.id}
-        isHost={isHost}
-        onKick={kickParticipant}
-      />
+    <div className={styles.screen}>
+      <div className={styles.top}>
+        <RoomToolbar
+          roomId={roomId}
+          onShare={handleShare}
+          hasSource={Boolean(room.source) && !pickingSource}
+          onChangeSource={() => setPickingSource(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onInviteFriend={() => setFriendsOpen(true)}
+          onOpenQueue={() => setQueueOpen(true)}
+          queueCount={room.queue.length}
+          onLeave={handleBack}
+        />
+        <ParticipantsBar
+          participants={room.participants}
+          currentUserId={telegramUser?.id}
+          isHost={isHost}
+          onKick={kickParticipant}
+        />
 
-      <div style={{ padding: 16 }}>
-        {room.source && !pickingSource ? (
-          <VideoPlayer
-            source={room.source}
-            playerRef={synced.playerRef}
-            suppressed={synced.suppressed}
-            onPlay={synced.onPlay}
-            onPause={synced.onPause}
-            onSeek={synced.onSeek}
-          />
-        ) : (
-          <VideoSourcePicker onSelect={changeSource} />
-        )}
+        <div className={styles.videoArea}>
+          {room.source && !pickingSource ? (
+            <VideoPlayer
+              source={room.source}
+              playerRef={synced.playerRef}
+              suppressed={synced.suppressed}
+              onPlay={synced.onPlay}
+              onPause={synced.onPause}
+              onSeek={synced.onSeek}
+              onEnded={handleEnded}
+            />
+          ) : (
+            <VideoSourcePicker onSelect={changeSource} />
+          )}
+        </div>
       </div>
 
-      <ChatPanel messages={room.messages} currentUserId={telegramUser?.id} onSend={sendChat} />
+      <ChatPanel
+        className={styles.chatFill}
+        messages={room.messages}
+        currentUserId={telegramUser?.id}
+        onSend={sendChat}
+      />
 
       <FriendsPanel open={friendsOpen} onOpenChange={setFriendsOpen} roomId={roomId} />
       <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
-    </List>
+      <QueuePanel
+        open={queueOpen}
+        onOpenChange={setQueueOpen}
+        queue={room.queue}
+        isHost={isHost}
+        onAdd={addToQueue}
+        onRemove={removeFromQueue}
+      />
+      {hostToast && (
+        <Snackbar onClose={() => setHostToast(null)} duration={3000}>
+          {hostToast}
+        </Snackbar>
+      )}
+    </div>
   );
 }

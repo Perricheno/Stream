@@ -1,4 +1,5 @@
 import type { ChatMessage } from "./chat";
+import type { QueueItem } from "./queue";
 
 export type VideoSource =
   | { type: "youtube"; videoId: string }
@@ -24,4 +25,5 @@ export interface RoomStatePayload {
   playback: PlaybackState;
   participants: Participant[];
   messages: ChatMessage[];
+  queue: QueueItem[];
 }

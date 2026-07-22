@@ -6,14 +6,18 @@ import {
   type ClientToServerEvents,
   type JoinRoomResult,
   type PlaybackActionPayload,
+  type QueueItem,
   type ServerToClientEvents,
 } from "@stream/shared";
 import {
   addChatMessage,
   addMember,
+  addQueueItem,
+  advanceQueue,
   getOrCreateRoom,
   getRoom,
   removeMember,
+  removeQueueItem,
   toParticipants,
   toStatePayload,
 } from "../rooms/RoomStore";
@@ -120,6 +124,41 @@ export function registerSocketHandlers(io: StreamServer): void {
       };
       addChatMessage(room, message);
       io.to(currentRoomId).emit("chat:message", message);
+    });
+
+    socket.on("queue:add", ({ source }) => {
+      if (!currentRoomId) return;
+      const room = getRoom(currentRoomId);
+      if (!room) return;
+
+      const member = room.members.find((m) => m.socketId === socket.id);
+      const item: QueueItem = {
+        id: randomUUID(),
+        source,
+        addedByUserId: socket.data.user.id,
+        addedByName: member?.firstName ?? socket.data.user.firstName,
+      };
+      if (!addQueueItem(room, item)) return;
+      io.to(currentRoomId).emit("queue:updated", { queue: room.queue });
+    });
+
+    socket.on("queue:remove", ({ itemId }) => {
+      if (!currentRoomId) return;
+      const room = getRoom(currentRoomId);
+      if (!room || room.hostSocketId !== socket.id) return; // host-only
+
+      removeQueueItem(room, itemId);
+      io.to(currentRoomId).emit("queue:updated", { queue: room.queue });
+    });
+
+    socket.on("queue:advance", () => {
+      if (!currentRoomId) return;
+      const room = getRoom(currentRoomId);
+      if (!room || room.hostSocketId !== socket.id) return; // host-only, avoids a double-pop race
+
+      if (!advanceQueue(room)) return;
+      io.to(currentRoomId).emit("playback:source-changed", { source: room.source! });
+      io.to(currentRoomId).emit("queue:updated", { queue: room.queue });
     });
 
     socket.on("room:kick", ({ targetUserId }) => {

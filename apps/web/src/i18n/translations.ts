@@ -43,6 +43,20 @@ const ru = {
   menu: "Меню",
   participant: "участник",
   participants: "участников",
+  enterFullscreen: "На весь экран",
+  exitFullscreen: "Выйти из полноэкранного режима",
+  queue: "Очередь",
+  queueEmpty: "Очередь пуста",
+  queueEmptyDescription: "Добавьте видео, чтобы они проигрывались по очереди",
+  queueAdd: "Добавить в очередь",
+  queueNowPlaying: "Сейчас играет",
+  queueUpNext: "Дальше в очереди",
+  queueRemove: "Убрать из очереди",
+  playbackSpeed: "Скорость",
+  hostTransferred: "Теперь хост — {name}",
+  addToHomeScreen: "На главный экран",
+  addToHomeScreenDone: "Ярлык добавлен",
+  addToHomeScreenFailed: "Не получилось добавить ярлык",
 } as const;
 
 const en: Record<keyof typeof ru, string> = {
@@ -88,6 +102,20 @@ const en: Record<keyof typeof ru, string> = {
   menu: "Menu",
   participant: "participant",
   participants: "participants",
+  enterFullscreen: "Fullscreen",
+  exitFullscreen: "Exit fullscreen",
+  queue: "Queue",
+  queueEmpty: "Queue is empty",
+  queueEmptyDescription: "Add videos to play them one after another",
+  queueAdd: "Add to queue",
+  queueNowPlaying: "Now playing",
+  queueUpNext: "Up next",
+  queueRemove: "Remove from queue",
+  playbackSpeed: "Speed",
+  hostTransferred: "{name} is now the host",
+  addToHomeScreen: "Add to home screen",
+  addToHomeScreenDone: "Shortcut added",
+  addToHomeScreenFailed: "Couldn't add the shortcut",
 };
 
 export type TranslationKey = keyof typeof ru;

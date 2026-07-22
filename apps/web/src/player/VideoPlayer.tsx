@@ -15,7 +15,7 @@ interface VideoPlayerProps extends PlayerAdapterEvents {
 
 /** Single entry point the app renders — picks the right adapter, and owns the
  * aspect-ratio container plus the custom minimal controls overlay. */
-export function VideoPlayer({ source, playerRef, suppressed, onPlay, onPause, onSeek }: VideoPlayerProps) {
+export function VideoPlayer({ source, playerRef, suppressed, onPlay, onPause, onSeek, onEnded }: VideoPlayerProps) {
   const progress = usePlayerProgress(playerRef);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -29,6 +29,7 @@ export function VideoPlayer({ source, playerRef, suppressed, onPlay, onPause, on
           onPlay={onPlay}
           onPause={onPause}
           onSeek={onSeek}
+          onEnded={onEnded}
         />
       ) : (
         <Html5PlayerAdapter
@@ -38,6 +39,7 @@ export function VideoPlayer({ source, playerRef, suppressed, onPlay, onPause, on
           onPlay={onPlay}
           onPause={onPause}
           onSeek={onSeek}
+          onEnded={onEnded}
         />
       )}
       <VideoControlsOverlay
