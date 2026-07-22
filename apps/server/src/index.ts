@@ -3,6 +3,7 @@ import { Server } from "socket.io";
 import type { ClientToServerEvents, ServerToClientEvents } from "@stream/shared";
 import { createApp } from "./app";
 import { env } from "./config/env";
+import { getRoomCount } from "./rooms/RoomStore";
 import { registerAuthMiddleware } from "./socket/auth";
 import { registerSocketHandlers } from "./socket/registerSocketHandlers";
 import type { SocketData } from "./socket/types";
@@ -16,6 +17,16 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents, Record<string,
 
 registerAuthMiddleware(io);
 registerSocketHandlers(io);
+
+/** Richer status for the client's service-status indicator (see apps/web/src/status). */
+app.get("/status", (_req, res) => {
+  res.json({
+    ok: true,
+    uptimeSeconds: process.uptime(),
+    connectedSockets: io.engine.clientsCount,
+    activeRooms: getRoomCount(),
+  });
+});
 
 httpServer.listen(env.port, () => {
   console.log(`Stream server listening on :${env.port}`);

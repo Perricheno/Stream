@@ -1,4 +1,4 @@
-import type { Participant, RoomStatePayload } from "@stream/shared";
+import { CHAT_HISTORY_LIMIT, type ChatMessage, type Participant, type RoomStatePayload } from "@stream/shared";
 import type { Room, RoomMember } from "./roomTypes";
 
 /** In-memory only — rooms are ephemeral and reset on server restart (see README). */
@@ -11,7 +11,7 @@ function initialPlayback() {
 export function getOrCreateRoom(roomId: string): Room {
   let room = rooms.get(roomId);
   if (!room) {
-    room = { id: roomId, hostSocketId: "", source: null, playback: initialPlayback(), members: [] };
+    room = { id: roomId, hostSocketId: "", source: null, playback: initialPlayback(), members: [], messages: [] };
     rooms.set(roomId, room);
   }
   return room;
@@ -19,6 +19,10 @@ export function getOrCreateRoom(roomId: string): Room {
 
 export function getRoom(roomId: string): Room | undefined {
   return rooms.get(roomId);
+}
+
+export function getRoomCount(): number {
+  return rooms.size;
 }
 
 export function addMember(room: Room, member: RoomMember): void {
@@ -53,5 +57,14 @@ export function toStatePayload(room: Room): RoomStatePayload {
     source: room.source,
     playback: room.playback,
     participants: toParticipants(room),
+    messages: room.messages,
   };
+}
+
+/** Appends a chat message, capping history so rooms don't grow unbounded. */
+export function addChatMessage(room: Room, message: ChatMessage): void {
+  room.messages.push(message);
+  if (room.messages.length > CHAT_HISTORY_LIMIT) {
+    room.messages.splice(0, room.messages.length - CHAT_HISTORY_LIMIT);
+  }
 }

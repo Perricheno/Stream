@@ -2,6 +2,8 @@
 
 A Telegram Mini App for watching video together — like Rave, but native to Telegram. React + Vite frontend styled with Telegram's own `telegram-ui` kit (the same design system @wallet uses), a Node/Socket.io backend for real-time playback sync, and Telegram animated stickers woven into the interface.
 
+Room features: a custom minimal video-control overlay (own play/pause/seek/fullscreen UI, no native YouTube/HTML5 chrome), real-time text chat, sticker reactions, a room profile (display-name override + a "hide my profile" visibility toggle, in **Settings**), and a live **service status** indicator (latency, active rooms, connection state).
+
 ## Stack
 
 - **apps/web** — React + TypeScript + Vite, `@telegram-apps/sdk-react` (theme, BackButton/MainButton/SecondaryButton, haptics, initData, CloudStorage) + `@telegram-apps/telegram-ui` (Section/Cell/List/Placeholder/Modal/...)
@@ -57,11 +59,12 @@ Telegram Mini Apps must be served over HTTPS, even in dev, so local testing goes
 
 ```
 apps/web/src/
-  telegram/     Telegram SDK bootstrap + hooks (theme, back/main/secondary button, haptics, initData, recent rooms)
-  socket/       Socket.io client + useRoomSocket (join/leave, room state)
-  player/       Unified video player (YouTube IFrame API + HTML5/hls.js) and playback sync
+  telegram/     Telegram SDK bootstrap + hooks (theme, back/main button, haptics, initData, recent rooms, settings)
+  socket/       Socket.io client + useRoomSocket (join/leave, room state, chat)
+  player/       Unified video player (YouTube IFrame API + HTML5/hls.js), custom controls overlay, playback sync
   stickers/     .tgs (gzipped Lottie) loader + renderer
-  screens/      Home and Room screens, built from @telegram-apps/telegram-ui components
+  status/       Service-status polling (/status) + indicator/panel
+  screens/      Home, Room (toolbar/menu/chat), and Settings screens, built from @telegram-apps/telegram-ui
 
 apps/server/src/
   telegram/     initData HMAC validation

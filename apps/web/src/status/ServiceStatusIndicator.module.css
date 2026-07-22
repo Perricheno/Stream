@@ -1,0 +1,21 @@
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: #8e8e93;
+  flex-shrink: 0;
+}
+
+.dot[data-state="ok"] {
+  background: #34c759;
+}
+
+.dot[data-state="slow"] {
+  background: #ff9500;
+}
+
+.dot[data-state="down"] {
+  background: #ff3b30;
+}

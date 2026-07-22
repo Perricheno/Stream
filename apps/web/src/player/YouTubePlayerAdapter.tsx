@@ -24,6 +24,8 @@ export const YouTubePlayerAdapter = forwardRef<PlayerHandle, YouTubePlayerAdapte
         pause: () => playerRef.current?.pauseVideo(),
         seekTo: (seconds) => playerRef.current?.seekTo(seconds, true),
         getCurrentTime: () => playerRef.current?.getCurrentTime() ?? 0,
+        getDuration: () => playerRef.current?.getDuration() ?? 0,
+        isPaused: () => playerRef.current?.getPlayerState() !== window.YT?.PlayerState.PLAYING,
       }),
       [],
     );
@@ -37,7 +39,22 @@ export const YouTubePlayerAdapter = forwardRef<PlayerHandle, YouTubePlayerAdapte
 
         playerRef.current = new YT.Player(elementId.current, {
           videoId,
-          playerVars: { playsinline: 1 },
+          width: "100%",
+          height: "100%",
+          // Strip YouTube's own chrome — we render our own minimal overlay
+          // (VideoControlsOverlay.tsx) instead.
+          playerVars: {
+            autoplay: 0,
+            cc_load_policy: 0,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            iv_load_policy: 3,
+            modestbranding: 1,
+            playsinline: 1,
+            rel: 0,
+            origin: window.location.origin,
+          },
           events: {
             onStateChange: (event) => {
               const atSeconds = event.target.getCurrentTime();
@@ -68,6 +85,6 @@ export const YouTubePlayerAdapter = forwardRef<PlayerHandle, YouTubePlayerAdapte
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [videoId]);
 
-    return <div className={styles.video} ref={containerRef} id={elementId.current} />;
+    return <div className={styles.fill} ref={containerRef} id={elementId.current} />;
   },
 );

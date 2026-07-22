@@ -1,11 +1,22 @@
+import { randomUUID } from "node:crypto";
 import type { Server } from "socket.io";
-import type {
-  ClientToServerEvents,
-  JoinRoomResult,
-  PlaybackActionPayload,
-  ServerToClientEvents,
+import {
+  CHAT_MESSAGE_MAX_LENGTH,
+  type ChatMessage,
+  type ClientToServerEvents,
+  type JoinRoomResult,
+  type PlaybackActionPayload,
+  type ServerToClientEvents,
 } from "@stream/shared";
-import { addMember, getOrCreateRoom, getRoom, removeMember, toParticipants, toStatePayload } from "../rooms/RoomStore";
+import {
+  addChatMessage,
+  addMember,
+  getOrCreateRoom,
+  getRoom,
+  removeMember,
+  toParticipants,
+  toStatePayload,
+} from "../rooms/RoomStore";
 import type { RoomMember } from "../rooms/roomTypes";
 import type { SocketData } from "./types";
 
@@ -56,12 +67,14 @@ export function registerSocketHandlers(io: StreamServer): void {
       }
 
       const room = getOrCreateRoom(roomId);
-      const member: RoomMember = {
-        socketId: socket.id,
-        userId: socket.data.user.id,
-        firstName: socket.data.user.firstName,
-        photoUrl: socket.data.user.photoUrl,
-      };
+      const member: RoomMember = payload.hideProfile
+        ? { socketId: socket.id, userId: socket.data.user.id, firstName: "Аноним" }
+        : {
+            socketId: socket.id,
+            userId: socket.data.user.id,
+            firstName: payload.displayName?.trim() || socket.data.user.firstName,
+            photoUrl: socket.data.user.photoUrl,
+          };
       addMember(room, member);
       socket.join(roomId);
       currentRoomId = roomId;
@@ -90,6 +103,25 @@ export function registerSocketHandlers(io: StreamServer): void {
     socket.on("reaction:send", ({ stickerId }) => {
       if (!currentRoomId) return;
       io.to(currentRoomId).emit("reaction:broadcast", { stickerId, fromUserId: socket.data.user.id });
+    });
+
+    socket.on("chat:send", ({ text }) => {
+      if (!currentRoomId) return;
+      const trimmed = text.trim().slice(0, CHAT_MESSAGE_MAX_LENGTH);
+      if (!trimmed) return;
+      const room = getRoom(currentRoomId);
+      if (!room) return;
+
+      const member = room.members.find((m) => m.socketId === socket.id);
+      const message: ChatMessage = {
+        id: randomUUID(),
+        fromUserId: socket.data.user.id,
+        fromName: member?.firstName ?? socket.data.user.firstName,
+        text: trimmed,
+        sentAt: Date.now(),
+      };
+      addChatMessage(room, message);
+      io.to(currentRoomId).emit("chat:message", message);
     });
 
     socket.on("disconnect", leaveCurrentRoom);

@@ -1,0 +1,56 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 50vh;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.empty {
+  margin: auto;
+  color: var(--tg-theme-hint-color, #708499);
+  font-size: 14px;
+  text-align: center;
+}
+
+.message {
+  max-width: 80%;
+  border-radius: 14px;
+  padding: 6px 10px;
+  background: var(--tg-theme-secondary-bg-color, rgba(118, 118, 128, 0.12));
+}
+
+.own {
+  align-self: flex-end;
+  background: var(--tg-theme-button-color, #5288c1);
+  color: var(--tg-theme-button-text-color, #fff);
+}
+
+.sender {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.text {
+  font-size: 15px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.time {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 16px;
+}
+
+.inputRow > :first-child {
+  flex: 1;
+}

@@ -14,6 +14,8 @@ declare namespace YT {
   }
 
   interface PlayerOptions {
+    width?: string | number;
+    height?: string | number;
     videoId?: string;
     playerVars?: Record<string, unknown>;
     events?: {
@@ -28,6 +30,7 @@ declare namespace YT {
     pauseVideo(): void;
     seekTo(seconds: number, allowSeekAhead: boolean): void;
     getCurrentTime(): number;
+    getDuration(): number;
     getPlayerState(): PlayerState;
     destroy(): void;
   }

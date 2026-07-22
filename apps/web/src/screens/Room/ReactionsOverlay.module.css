@@ -31,8 +31,29 @@
 }
 
 .buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  margin: 12px auto 20px;
+  padding: 6px;
+  border-radius: 999px;
+  background: var(--tg-theme-secondary-bg-color, rgba(118, 118, 128, 0.12));
+}
+
+.reactionButton {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
   display: flex;
+  align-items: center;
   justify-content: center;
-  gap: 16px;
-  padding: 12px 0 20px;
+  border: none;
+  padding: 0;
+  background: var(--tg-theme-bg-color, #fff);
+  transition: transform 0.15s ease;
+}
+
+.reactionButton:active {
+  transform: scale(0.88);
 }

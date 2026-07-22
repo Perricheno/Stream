@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
-import { IconButton } from "@telegram-apps/telegram-ui";
 import { StickerPlayer } from "../../stickers/StickerPlayer";
 import type { StickerId } from "../../stickers/stickers.manifest";
 import type { RoomSocket } from "../../socket/socketClient";
@@ -63,9 +62,15 @@ export function ReactionsOverlay({ socket }: ReactionsOverlayProps) {
       </div>
       <div className={styles.buttons}>
         {REACTIONS.map((id) => (
-          <IconButton key={id} mode="plain" size="l" onClick={() => sendReaction(id)} aria-label={id}>
-            <StickerPlayer id={id} size={32} loop autoplay />
-          </IconButton>
+          <button
+            key={id}
+            type="button"
+            className={styles.reactionButton}
+            onClick={() => sendReaction(id)}
+            aria-label={id}
+          >
+            <StickerPlayer id={id} size={28} loop autoplay />
+          </button>
         ))}
       </div>
     </div>

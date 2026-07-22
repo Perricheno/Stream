@@ -3,6 +3,8 @@ export interface PlayerHandle {
   pause(): void;
   seekTo(seconds: number): void;
   getCurrentTime(): number;
+  getDuration(): number;
+  isPaused(): boolean;
 }
 
 export interface PlayerAdapterEvents {

@@ -22,6 +22,11 @@ export const Html5PlayerAdapter = forwardRef<PlayerHandle, Html5PlayerAdapterPro
           if (videoRef.current) videoRef.current.currentTime = seconds;
         },
         getCurrentTime: () => videoRef.current?.currentTime ?? 0,
+        getDuration: () => {
+          const duration = videoRef.current?.duration;
+          return Number.isFinite(duration) ? (duration as number) : 0;
+        },
+        isPaused: () => videoRef.current?.paused ?? true,
       }),
       [],
     );
@@ -65,6 +70,6 @@ export const Html5PlayerAdapter = forwardRef<PlayerHandle, Html5PlayerAdapterPro
       };
     }, [onPlay, onPause, onSeek, suppressed]);
 
-    return <video ref={videoRef} playsInline controls className={styles.video} />;
+    return <video ref={videoRef} playsInline disablePictureInPicture className={styles.fill} />;
   },
 );

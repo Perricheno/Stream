@@ -1,3 +1,5 @@
+import type { ChatMessage } from "./chat";
+
 export type VideoSource =
   | { type: "youtube"; videoId: string }
   | { type: "file"; url: string; kind: "mp4" | "hls" };
@@ -21,4 +23,5 @@ export interface RoomStatePayload {
   source: VideoSource | null;
   playback: PlaybackState;
   participants: Participant[];
+  messages: ChatMessage[];
 }

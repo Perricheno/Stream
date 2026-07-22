@@ -64,13 +64,33 @@ function buildMockLaunchParams() {
  * this fabricates a launch context first, so every hook below has something
  * to read — see README for how initData validation is bypassed server-side
  * in that case.
+ *
+ * Some real Telegram clients omit fields the SDK's launch-params parser
+ * treats as required (e.g. `signature`), which makes `init()` throw even
+ * though we're genuinely inside Telegram. If that happens we fall back to
+ * the mock environment so the UI (theme, buttons, haptics) still works —
+ * the socket auth path doesn't depend on this parser anyway, it reads the
+ * raw initData straight from the URL (see rawInitData.ts).
  */
 export function bootstrapTelegram(): void {
-  if (!isTMA("simple")) {
-    mockTelegramEnv(buildMockLaunchParams());
+  let initialized = false;
+
+  if (isTMA("simple")) {
+    try {
+      initSdk();
+      initialized = true;
+    } catch (err) {
+      console.warn(
+        "[telegram] Failed to initialize against the real environment, falling back to mock:",
+        err,
+      );
+    }
   }
 
-  initSdk();
+  if (!initialized) {
+    mockTelegramEnv(buildMockLaunchParams());
+    initSdk();
+  }
 
   if (miniApp.mount.isAvailable()) miniApp.mount();
   if (miniApp.bindCssVars.isAvailable()) miniApp.bindCssVars();
