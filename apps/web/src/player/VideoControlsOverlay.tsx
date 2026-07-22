@@ -29,7 +29,7 @@ function PauseIcon() {
   );
 }
 
-function FullscreenIcon() {
+function ExpandIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M4 9V4h5v2H6v3H4zm0 6h2v3h3v2H4v-5zm16-6h-2V6h-3V4h5v5zm-2 6h2v5h-5v-2h3v-3z" />
@@ -37,13 +37,30 @@ function FullscreenIcon() {
   );
 }
 
+function CollapseIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M9 4H7v3H4v2h5V4zm6 0v5h5V7h-3V4h-2zM4 15v2h3v3h2v-5H4zm11 5h2v-3h3v-2h-5v5z" />
+    </svg>
+  );
+}
+
+function PipIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M19 7H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zm0 12H5V9h14v10zM13 13h5v4h-5z" />
+    </svg>
+  );
+}
+
 interface VideoControlsOverlayProps {
   playerRef: React.RefObject<PlayerHandle>;
   progress: PlayerProgress;
-  fullscreenTargetRef: React.RefObject<HTMLDivElement>;
+  isFullscreen: boolean;
+  onToggleFullscreen: () => void;
 }
 
-export function VideoControlsOverlay({ playerRef, progress, fullscreenTargetRef }: VideoControlsOverlayProps) {
+export function VideoControlsOverlay({ playerRef, progress, isFullscreen, onToggleFullscreen }: VideoControlsOverlayProps) {
   const [visible, setVisible] = useState(true);
   const [dragValue, setDragValue] = useState<number | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -74,19 +91,18 @@ export function VideoControlsOverlay({ playerRef, progress, fullscreenTargetRef 
     showControls();
   }, [playerRef, showControls]);
 
-  const toggleFullscreen = useCallback(() => {
-    const target = fullscreenTargetRef.current;
-    if (!target) return;
-    if (document.fullscreenElement) {
-      void document.exitFullscreen();
-    } else if (target.requestFullscreen) {
-      void target.requestFullscreen();
-    }
+  const handleFullscreenClick = useCallback(() => {
+    onToggleFullscreen();
     showControls();
-  }, [fullscreenTargetRef, showControls]);
+  }, [onToggleFullscreen, showControls]);
+
+  const handlePipClick = useCallback(() => {
+    playerRef.current?.requestPictureInPicture?.();
+    showControls();
+  }, [playerRef, showControls]);
 
   const displayedTime = dragValue ?? progress.currentTime;
-  const fullscreenSupported = typeof document.exitFullscreen === "function";
+  const pipSupported = typeof playerRef.current?.requestPictureInPicture === "function";
 
   return (
     <div className={styles.overlay} onPointerDown={showControls}>
@@ -113,16 +129,19 @@ export function VideoControlsOverlay({ playerRef, progress, fullscreenTargetRef 
             }}
           />
           <span className={styles.time}>{formatTime(progress.duration)}</span>
-          {fullscreenSupported && (
-            <button
-              type="button"
-              className={styles.fullscreenButton}
-              onClick={toggleFullscreen}
-              aria-label="Fullscreen"
-            >
-              <FullscreenIcon />
+          {pipSupported && (
+            <button type="button" className={styles.iconButton} onClick={handlePipClick} aria-label="Картинка в картинке">
+              <PipIcon />
             </button>
           )}
+          <button
+            type="button"
+            className={styles.iconButton}
+            onClick={handleFullscreenClick}
+            aria-label={isFullscreen ? "Свернуть" : "Развернуть"}
+          >
+            {isFullscreen ? <CollapseIcon /> : <ExpandIcon />}
+          </button>
         </div>
       </div>
     </div>

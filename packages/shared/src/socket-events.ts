@@ -28,7 +28,6 @@ export interface ClientToServerEvents {
   "playback:pause": (payload: PlaybackActionPayload) => void;
   "playback:seek": (payload: PlaybackActionPayload) => void;
   "playback:change-source": (payload: { source: VideoSource }) => void;
-  "reaction:send": (payload: { stickerId: string }) => void;
   "chat:send": (payload: { text: string }) => void;
 }
 
@@ -37,7 +36,6 @@ export interface ServerToClientEvents {
   "room:participants": (participants: Participant[]) => void;
   "playback:sync": (payload: PlaybackSyncPayload) => void;
   "playback:source-changed": (payload: { source: VideoSource }) => void;
-  "reaction:broadcast": (payload: { stickerId: string; fromUserId: number }) => void;
   "chat:message": (message: ChatMessage) => void;
   "room:error": (payload: { code: string; message: string }) => void;
 }

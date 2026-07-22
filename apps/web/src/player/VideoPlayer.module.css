@@ -7,6 +7,19 @@
   overflow: hidden;
 }
 
+/* CSS-only "fullscreen" — the real Fullscreen API is unreliable for
+   non-<video> elements on iOS/WebKit (which Telegram's iOS client uses),
+   so we just expand to fill the viewport instead. Works everywhere. */
+.fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  aspect-ratio: unset;
+  border-radius: 0;
+  z-index: 1000;
+}
+
 .fill {
   position: absolute;
   inset: 0;

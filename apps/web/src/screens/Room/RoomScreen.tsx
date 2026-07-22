@@ -15,7 +15,6 @@ import { StickerPlayer } from "../../stickers/StickerPlayer";
 import { SettingsPanel } from "../Settings/SettingsPanel";
 import { ParticipantsBar } from "./ParticipantsBar";
 import { VideoSourcePicker } from "./VideoSourcePicker";
-import { ReactionsOverlay } from "./ReactionsOverlay";
 import { RoomToolbar } from "./RoomToolbar";
 import { ChatPanel } from "./ChatPanel";
 
@@ -32,7 +31,6 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
   const haptics = useHapticFeedback();
   const telegramUser = useTelegramUser();
   const synced = useSyncedPlayback(socket, room?.playback ?? null);
-  const [chatOpen, setChatOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pickingSource, setPickingSource] = useState(false);
 
@@ -87,7 +85,6 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
     <List>
       <RoomToolbar
         roomId={roomId}
-        onOpenChat={() => setChatOpen(true)}
         onShare={handleShare}
         hasSource={Boolean(room.source) && !pickingSource}
         onChangeSource={() => setPickingSource(true)}
@@ -111,15 +108,8 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
         )}
       </div>
 
-      <ReactionsOverlay socket={socket} />
+      <ChatPanel messages={room.messages} currentUserId={telegramUser?.id} onSend={sendChat} />
 
-      <ChatPanel
-        open={chatOpen}
-        onOpenChange={setChatOpen}
-        messages={room.messages}
-        currentUserId={telegramUser?.id}
-        onSend={sendChat}
-      />
       <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
     </List>
   );

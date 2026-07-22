@@ -16,6 +16,19 @@ const DEV_USER = {
   language_code: "en",
 };
 
+/**
+ * Best-effort platform guess for the mock fallback below. Matters even on a
+ * real device: telegram-ui renders visibly different (and correct-looking)
+ * styles for "ios" vs "base", so if we ever fall back to the mock on a real
+ * iPhone, hardcoding "tdesktop" would make every Cell/Section look wrong.
+ */
+function detectMockPlatform(): "ios" | "android" | "tdesktop" {
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua)) return "ios";
+  if (/Android/.test(ua)) return "android";
+  return "tdesktop";
+}
+
 function buildMockLaunchParams() {
   const authDateSeconds = Math.floor(Date.now() / 1000);
   const hash = "0".repeat(64);
@@ -55,7 +68,7 @@ function buildMockLaunchParams() {
     },
     initDataRaw,
     version: "8",
-    platform: "tdesktop" as const,
+    platform: detectMockPlatform(),
   };
 }
 

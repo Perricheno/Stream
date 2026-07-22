@@ -1,36 +1,50 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+}
+
 .list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  height: 50vh;
+  gap: 6px;
+  height: 260px;
   overflow-y: auto;
-  padding: 16px;
+  padding: 12px 12px 8px;
 }
 
 .empty {
   margin: auto;
   color: var(--tg-theme-hint-color, #708499);
   font-size: 14px;
-  text-align: center;
 }
 
-.message {
-  max-width: 80%;
-  border-radius: 14px;
-  padding: 6px 10px;
-  background: var(--tg-theme-secondary-bg-color, rgba(118, 118, 128, 0.12));
+.row {
+  display: flex;
+}
+
+.rowOwn {
+  justify-content: flex-end;
+}
+
+.bubble {
+  max-width: 78%;
+  background: var(--tg-theme-secondary-bg-color, #212121);
+  border-radius: 14px 14px 14px 4px;
+  padding: 6px 10px 4px;
+  display: flex;
+  flex-direction: column;
 }
 
 .own {
-  align-self: flex-end;
-  background: var(--tg-theme-button-color, #5288c1);
+  background: var(--tg-theme-button-color, #3390ec);
   color: var(--tg-theme-button-text-color, #fff);
+  border-radius: 14px 14px 4px 14px;
 }
 
 .sender {
   font-size: 12px;
   font-weight: 600;
-  opacity: 0.8;
+  color: var(--tg-theme-accent-text-color, #3390ec);
 }
 
 .text {
@@ -40,17 +54,44 @@
 }
 
 .time {
-  font-size: 11px;
+  align-self: flex-end;
+  font-size: 10px;
   opacity: 0.6;
+  margin-top: 2px;
 }
 
 .inputRow {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px 16px;
+  padding: 8px 12px 12px;
+  border-top: 0.5px solid var(--tg-theme-section-separator-color, rgba(118, 118, 128, 0.2));
 }
 
-.inputRow > :first-child {
+.input {
   flex: 1;
+  border: none;
+  outline: none;
+  border-radius: 20px;
+  padding: 9px 14px;
+  font-size: 15px;
+  background: var(--tg-theme-secondary-bg-color, #212121);
+  color: var(--tg-theme-text-color, #fff);
+}
+
+.sendButton {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--tg-theme-button-color, #3390ec);
+  color: var(--tg-theme-button-text-color, #fff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sendButton:disabled {
+  opacity: 0.4;
 }

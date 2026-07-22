@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { IconButton, Input, Modal } from "@telegram-apps/telegram-ui";
 import { CHAT_MESSAGE_MAX_LENGTH, type ChatMessage } from "@stream/shared";
 import styles from "./ChatPanel.module.css";
 
 function SendIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M3 20l18-8L3 4v6l12 2-12 2z" />
     </svg>
   );
@@ -16,22 +15,20 @@ function formatMessageTime(sentAt: number): string {
 }
 
 interface ChatPanelProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   messages: ChatMessage[];
   currentUserId?: number;
   onSend: (text: string) => void;
 }
 
-export function ChatPanel({ open, onOpenChange, messages, currentUserId, onSend }: ChatPanelProps) {
+/** Inline chat feed rendered directly under the video, Telegram-bubble styled — not a modal, so it behaves like normal page content with the on-screen keyboard. */
+export function ChatPanel({ messages, currentUserId, onSend }: ChatPanelProps) {
   const [value, setValue] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open) return;
     const list = listRef.current;
     if (list) list.scrollTop = list.scrollHeight;
-  }, [open, messages.length]);
+  }, [messages.length]);
 
   const submit = () => {
     const trimmed = value.trim();
@@ -41,25 +38,28 @@ export function ChatPanel({ open, onOpenChange, messages, currentUserId, onSend 
   };
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} header={<Modal.Header>Чат</Modal.Header>}>
+    <div className={styles.panel}>
       <div ref={listRef} className={styles.list}>
         {messages.length === 0 ? (
           <div className={styles.empty}>Сообщений пока нет</div>
         ) : (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className={`${styles.message} ${message.fromUserId === currentUserId ? styles.own : ""}`}
-            >
-              {message.fromUserId !== currentUserId && <div className={styles.sender}>{message.fromName}</div>}
-              <div className={styles.text}>{message.text}</div>
-              <div className={styles.time}>{formatMessageTime(message.sentAt)}</div>
-            </div>
-          ))
+          messages.map((message) => {
+            const isOwn = message.fromUserId === currentUserId;
+            return (
+              <div key={message.id} className={`${styles.row} ${isOwn ? styles.rowOwn : ""}`}>
+                <div className={`${styles.bubble} ${isOwn ? styles.own : ""}`}>
+                  {!isOwn && <div className={styles.sender}>{message.fromName}</div>}
+                  <span className={styles.text}>{message.text}</span>
+                  <span className={styles.time}>{formatMessageTime(message.sentAt)}</span>
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
       <div className={styles.inputRow}>
-        <Input
+        <input
+          className={styles.input}
           placeholder="Сообщение"
           value={value}
           maxLength={CHAT_MESSAGE_MAX_LENGTH}
@@ -71,10 +71,10 @@ export function ChatPanel({ open, onOpenChange, messages, currentUserId, onSend 
             }
           }}
         />
-        <IconButton mode="bezeled" size="m" onClick={submit} disabled={!value.trim()} aria-label="Отправить">
+        <button type="button" className={styles.sendButton} onClick={submit} disabled={!value.trim()} aria-label="Отправить">
           <SendIcon />
-        </IconButton>
+        </button>
       </div>
-    </Modal>
+    </div>
   );
 }

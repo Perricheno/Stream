@@ -100,11 +100,6 @@ export function registerSocketHandlers(io: StreamServer): void {
       io.to(currentRoomId).emit("playback:source-changed", { source });
     });
 
-    socket.on("reaction:send", ({ stickerId }) => {
-      if (!currentRoomId) return;
-      io.to(currentRoomId).emit("reaction:broadcast", { stickerId, fromUserId: socket.data.user.id });
-    });
-
     socket.on("chat:send", ({ text }) => {
       if (!currentRoomId) return;
       const trimmed = text.trim().slice(0, CHAT_MESSAGE_MAX_LENGTH);

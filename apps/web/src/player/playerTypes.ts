@@ -5,6 +5,8 @@ export interface PlayerHandle {
   getCurrentTime(): number;
   getDuration(): number;
   isPaused(): boolean;
+  /** Native "play over everything" mode — only implemented for direct video files (not YouTube). */
+  requestPictureInPicture?(): void;
 }
 
 export interface PlayerAdapterEvents {
