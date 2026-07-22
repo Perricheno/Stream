@@ -98,14 +98,27 @@ export function VideoControlsOverlay({ playerRef, progress, isFullscreen, onTogg
   const [isMuted, setIsMuted] = useState(false);
   const [speedIndex, setSpeedIndex] = useState(PLAYBACK_SPEEDS.indexOf(1));
   const [qualityLabel, setQualityLabel] = useState<string | null>(null);
+  // Optimistic override for the play/pause icon: usePlayerProgress only
+  // samples the player every 250ms, so without this, tapping play/pause
+  // felt like it had a delay before the button visually caught up — even
+  // though the video itself responded instantly (play()/pause() are called
+  // directly on the native player, not through this state).
+  const [optimisticPlaying, setOptimisticPlaying] = useState<boolean | null>(null);
+  const isPlaying = optimisticPlaying ?? progress.isPlaying;
   const lastVolumeRef = useRef(1);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>();
 
+  useEffect(() => {
+    if (optimisticPlaying !== null && progress.isPlaying === optimisticPlaying) {
+      setOptimisticPlaying(null);
+    }
+  }, [progress.isPlaying, optimisticPlaying]);
+
   const scheduleHide = useCallback(() => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
-    if (!progress.isPlaying) return;
+    if (!isPlaying) return;
     hideTimer.current = setTimeout(() => setVisible(false), AUTO_HIDE_MS);
-  }, [progress.isPlaying]);
+  }, [isPlaying]);
 
   const showControls = useCallback(() => {
     setVisible(true);
@@ -122,8 +135,13 @@ export function VideoControlsOverlay({ playerRef, progress, isFullscreen, onTogg
   const togglePlayPause = useCallback(() => {
     const player = playerRef.current;
     if (!player) return;
-    if (player.isPaused()) player.play();
-    else player.pause();
+    if (player.isPaused()) {
+      player.play();
+      setOptimisticPlaying(true);
+    } else {
+      player.pause();
+      setOptimisticPlaying(false);
+    }
     showControls();
   }, [playerRef, showControls]);
 
@@ -176,10 +194,10 @@ export function VideoControlsOverlay({ playerRef, progress, isFullscreen, onTogg
 
   return (
     <div className={styles.overlay} onPointerDown={showControls}>
-      <div className={styles.scrim} data-visible={visible} data-playing={progress.isPlaying} />
+      <div className={styles.scrim} data-visible={visible} data-playing={isPlaying} />
       <div className={styles.controlsGroup} data-visible={visible}>
         <button type="button" className={styles.playButton} onClick={togglePlayPause} aria-label="Play/Pause">
-          {progress.isPlaying ? <PauseIcon /> : <PlayIcon />}
+          {isPlaying ? <PauseIcon /> : <PlayIcon />}
         </button>
         <div className={styles.bottomBar}>
           <span className={styles.time}>{formatTime(displayedTime)}</span>

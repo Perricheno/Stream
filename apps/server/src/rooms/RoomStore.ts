@@ -11,6 +11,9 @@ import type { Room, RoomMember } from "./roomTypes";
 /** In-memory only — rooms are ephemeral and reset on server restart (see README). */
 const rooms = new Map<string, Room>();
 
+/** How long a room survives with no members before it's actually torn down — covers a brief disconnect/reconnect (network blip, backgrounding) without losing the video, queue, or chat history. */
+const ROOM_EMPTY_GRACE_MS = 10 * 60 * 1000;
+
 function initialPlayback() {
   return { isPlaying: false, positionSeconds: 0, updatedAtServerTime: Date.now() };
 }
@@ -26,6 +29,7 @@ export function getOrCreateRoom(roomId: string): Room {
       members: [],
       messages: [],
       queue: [],
+      emptyTimer: null,
     };
     rooms.set(roomId, room);
   }
@@ -41,6 +45,13 @@ export function getRoomCount(): number {
 }
 
 export function addMember(room: Room, member: RoomMember): void {
+  // Someone (re)joined — cancel any pending teardown from the room having
+  // gone empty (see removeMember).
+  if (room.emptyTimer) {
+    clearTimeout(room.emptyTimer);
+    room.emptyTimer = null;
+  }
+
   // A reconnect gets a fresh socket id, so if this user was already the host
   // under their previous connection, carry host status forward — otherwise
   // `hostSocketId` would keep pointing at a now-dead socket and they'd
@@ -53,14 +64,23 @@ export function addMember(room: Room, member: RoomMember): void {
   if (!room.hostSocketId || wasHost) room.hostSocketId = member.socketId;
 }
 
-/** Removes a member by socket id. Promotes the next member to host if the host left, and drops the room once empty. */
+/**
+ * Removes a member by socket id and promotes the next member to host if the
+ * host left. A room with no members left isn't deleted immediately — it's
+ * kept around for a grace period (see ROOM_EMPTY_GRACE_MS) so a brief
+ * disconnect (network blip, the webview getting backgrounded) doesn't wipe
+ * out the video, queue, and chat history from under someone about to
+ * reconnect. Only torn down once the grace period elapses with still no one back.
+ */
 export function removeMember(room: Room, socketId: string): void {
   room.members = room.members.filter((member) => member.socketId !== socketId);
   if (room.hostSocketId === socketId) {
     room.hostSocketId = room.members[0]?.socketId ?? "";
   }
-  if (room.members.length === 0) {
-    rooms.delete(room.id);
+  if (room.members.length === 0 && !room.emptyTimer) {
+    room.emptyTimer = setTimeout(() => {
+      if (room.members.length === 0) rooms.delete(room.id);
+    }, ROOM_EMPTY_GRACE_MS);
   }
 }
 

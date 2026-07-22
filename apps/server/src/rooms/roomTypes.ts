@@ -15,4 +15,6 @@ export interface Room {
   members: RoomMember[];
   messages: ChatMessage[];
   queue: QueueItem[];
+  /** Pending deletion timer while the room has no members — lets a reconnect within the grace period find everything (video, queue, chat) still intact. */
+  emptyTimer: ReturnType<typeof setTimeout> | null;
 }

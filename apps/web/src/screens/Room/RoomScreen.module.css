@@ -1,4 +1,13 @@
 .screen {
+  /* Fixed, not in normal flow — deliberately bypasses <body>'s own
+     safe-area padding (global.css) so the two don't stack. Body's padding
+     is meant for normal-flow pages like Home; this screen owns its full
+     layout instead, so it needs its own matching padding below. Without
+     this, the total content height was safe-area-top (from body) PLUS
+     this element's own full-viewport height — taller than the actual
+     screen, which is why the chat input needed a scroll to reach. */
+  position: fixed;
+  inset: 0;
   display: flex;
   flex-direction: column;
   /* Telegram resizes this CSS var when the on-screen keyboard opens, which
@@ -8,7 +17,13 @@
   height: var(--tg-viewport-height, 100dvh);
   overflow: hidden;
   background: var(--tg-theme-bg-color, #17212b);
-  /* Guards against notch/rounded-corner clipping in landscape fullscreen. */
+  /* Top/bottom account for both the device's own safe area (notch, home
+     indicator) AND Telegram's own fullscreen-mode chrome (the persistent
+     Back/collapse/menu row it overlays on top in that mode) — the latter
+     is "content" safe area, a separate value from the device's. Without
+     it, that native row visually overlapped our own toolbar. */
+  padding-top: calc(var(--tg-viewport-safe-area-inset-top, 0px) + var(--tg-viewport-content-safe-area-inset-top, 0px));
+  padding-bottom: calc(var(--tg-viewport-safe-area-inset-bottom, 0px) + var(--tg-viewport-content-safe-area-inset-bottom, 0px));
   padding-left: var(--tg-viewport-safe-area-inset-left, 0px);
   padding-right: var(--tg-viewport-safe-area-inset-right, 0px);
 }

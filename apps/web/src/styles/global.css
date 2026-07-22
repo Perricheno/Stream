@@ -19,8 +19,12 @@ body {
   background: var(--tg-theme-bg-color, #17212b);
   color: var(--tg-theme-text-color, #f5f5f5);
   overscroll-behavior-y: contain;
-  padding-top: var(--tg-viewport-safe-area-inset-top, 0px);
-  padding-bottom: var(--tg-viewport-safe-area-inset-bottom, 0px);
+  /* Device safe area (notch) plus Telegram's own fullscreen-mode chrome
+     (the persistent Back/collapse/menu row it overlays in that mode) —
+     the latter is a separate "content" safe area value; without it this
+     row overlapped page content once fullscreen was requested on launch. */
+  padding-top: calc(var(--tg-viewport-safe-area-inset-top, 0px) + var(--tg-viewport-content-safe-area-inset-top, 0px));
+  padding-bottom: calc(var(--tg-viewport-safe-area-inset-bottom, 0px) + var(--tg-viewport-content-safe-area-inset-bottom, 0px));
 }
 
 img,
