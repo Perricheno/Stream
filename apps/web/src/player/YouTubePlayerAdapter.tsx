@@ -25,7 +25,7 @@ export const YouTubePlayerAdapter = forwardRef<PlayerHandle, YouTubePlayerAdapte
         seekTo: (seconds) => playerRef.current?.seekTo(seconds, true),
         getCurrentTime: () => playerRef.current?.getCurrentTime() ?? 0,
         getDuration: () => playerRef.current?.getDuration() ?? 0,
-        isPaused: () => playerRef.current?.getPlayerState() !== window.YT?.PlayerState.PLAYING,
+        isPaused: () => playerRef.current?.getPlayerState() !== window.YT?.PlayerState?.PLAYING,
         getVolume: () => (playerRef.current ? playerRef.current.getVolume() / 100 : 1),
         setVolume: (volume) => playerRef.current?.setVolume(Math.round(Math.min(1, Math.max(0, volume)) * 100)),
         getPlaybackRate: () => playerRef.current?.getPlaybackRate() ?? 1,

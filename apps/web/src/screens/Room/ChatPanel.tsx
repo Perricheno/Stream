@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CHAT_MESSAGE_MAX_LENGTH, type ChatMessage } from "@stream/shared";
+import { StickerPlayer } from "../../stickers/StickerPlayer";
 import styles from "./ChatPanel.module.css";
 
 function SendIcon() {
@@ -77,7 +78,10 @@ export function ChatPanel({ messages, currentUserId, onSend, className }: ChatPa
       <div className={styles.listWrapper}>
         <div ref={listRef} className={styles.list} onScroll={handleScroll}>
           {messages.length === 0 ? (
-            <div className={styles.empty}>Сообщений пока нет</div>
+            <div className={styles.empty}>
+              <StickerPlayer id="happy" size={80} />
+              <span>Сообщений пока нет — напишите первым!</span>
+            </div>
           ) : (
             messages.map((message) => {
               const isOwn = message.fromUserId === currentUserId;
