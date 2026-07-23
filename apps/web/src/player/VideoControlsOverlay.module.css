@@ -53,11 +53,17 @@
   pointer-events: auto;
 }
 
-.playButton {
+.centerControls {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.playButton {
   width: 60px;
   height: 60px;
   border-radius: 50%;
@@ -69,6 +75,22 @@
   justify-content: center;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+
+.skipButton {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
 }
 
 .chatButton {
@@ -110,9 +132,31 @@
   right: 0;
   bottom: 0;
   display: flex;
+  flex-direction: column;
+  padding: 4px 6px calc(2px + env(safe-area-inset-bottom, 0px));
+  /* Own backdrop, separate from .scrim's whole-video gradient — that one
+     was tuned for a single control row and left this area too transparent
+     once a second row (mute/speed/pip/fullscreen) pushed the bar taller,
+     letting YouTube's own bottom-right watermark show through right behind
+     our icons. This guarantees the controls stay legible regardless of how
+     tall the bar ends up being. */
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.92) 65%, rgba(0, 0, 0, 0) 100%);
+}
+
+.seekRow {
+  display: flex;
   align-items: center;
   gap: 2px;
-  padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px));
+}
+
+.actionRow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.actionSpacer {
+  flex: 1;
 }
 
 .time {

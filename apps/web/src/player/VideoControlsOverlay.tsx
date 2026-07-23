@@ -97,6 +97,31 @@ function ChatIcon() {
   );
 }
 
+function SkipBackIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M11.5 12 20 18V6zM4 6v12l8.5-6z" />
+      <text x="12" y="21.5" fontSize="7" fontWeight="700" textAnchor="middle" fill="currentColor" stroke="none">
+        10
+      </text>
+    </svg>
+  );
+}
+
+function SkipForwardIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12.5 12 4 18V6zM20 6v12l-8.5-6z" />
+      <text x="12" y="21.5" fontSize="7" fontWeight="700" textAnchor="middle" fill="currentColor" stroke="none">
+        10
+      </text>
+    </svg>
+  );
+}
+
+const SEEK_SKIP_SECONDS = 10;
+const VOLUME_SYNC_MS = 1000;
+
 interface VideoControlsOverlayProps {
   playerRef: React.RefObject<PlayerHandle>;
   progress: PlayerProgress;
@@ -139,6 +164,27 @@ export function VideoControlsOverlay({
       setOptimisticPlaying(null);
     }
   }, [progress.isPlaying, optimisticPlaying]);
+
+  // Volume/mute state only ever got SET by our own actions (the mute button,
+  // the swipe gesture) — nothing ever read it back from the player, so if the
+  // player's actual volume changed for a reason we didn't drive (a browser
+  // autoplay policy silently force-muting playback is the big one — YouTube
+  // in particular can start a programmatically-triggered play() muted
+  // without ever telling this component), the button kept showing "sound is
+  // on" while the video played silently. Polling corrects that drift instead
+  // of only ever writing one way.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (gestureRef.current?.isDragging) return;
+      const player = playerRef.current;
+      if (!player) return;
+      const actualVolume = player.getVolume();
+      setIsMuted(actualVolume <= 0);
+      setVolumeLevel((prev) => (Math.abs(prev - actualVolume) > 0.01 ? actualVolume : prev));
+      if (actualVolume > 0) lastVolumeRef.current = actualVolume;
+    }, VOLUME_SYNC_MS);
+    return () => clearInterval(interval);
+  }, [playerRef]);
 
   const scheduleHide = useCallback(() => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -255,6 +301,17 @@ export function VideoControlsOverlay({
     showControls();
   }, [playerRef, showControls]);
 
+  const skip = useCallback(
+    (deltaSeconds: number) => {
+      const player = playerRef.current;
+      if (!player) return;
+      const target = Math.min(Math.max(player.getCurrentTime() + deltaSeconds, 0), progress.duration || Infinity);
+      player.seekTo(target);
+      showControls();
+    },
+    [playerRef, progress.duration, showControls],
+  );
+
   const handleFullscreenClick = useCallback(() => {
     onToggleFullscreen();
     showControls();
@@ -326,66 +383,84 @@ export function VideoControlsOverlay({
             </span>
           )}
         </button>
-        <button type="button" className={styles.playButton} onClick={togglePlayPause} aria-label="Play/Pause">
-          {isPlaying ? <PauseIcon /> : <PlayIcon />}
-        </button>
+        <div className={styles.centerControls}>
+          <button type="button" className={styles.skipButton} onClick={() => skip(-SEEK_SKIP_SECONDS)} aria-label="Назад на 10 секунд">
+            <SkipBackIcon />
+          </button>
+          <button type="button" className={styles.playButton} onClick={togglePlayPause} aria-label="Play/Pause">
+            {isPlaying ? <PauseIcon /> : <PlayIcon />}
+          </button>
+          <button
+            type="button"
+            className={styles.skipButton}
+            onClick={() => skip(SEEK_SKIP_SECONDS)}
+            aria-label="Вперёд на 10 секунд"
+          >
+            <SkipForwardIcon />
+          </button>
+        </div>
         <div className={styles.bottomBar}>
-          <span className={styles.time}>{formatTime(displayedTime)}</span>
-          <input
-            type="range"
-            className={styles.seekBar}
-            min={0}
-            max={progress.duration || 0}
-            step={0.5}
-            value={displayedTime}
-            onChange={(event) => setDragValue(Number(event.target.value))}
-            onPointerUp={(event) => {
-              const value = Number((event.target as HTMLInputElement).value);
-              playerRef.current?.seekTo(value);
-              setDragValue(null);
-              showControls();
-            }}
-          />
-          <span className={styles.time}>{formatTime(progress.duration)}</span>
-          <button
-            type="button"
-            className={`${styles.iconButton} ${styles.speedButton}`}
-            onClick={cycleSpeed}
-            aria-label="Скорость воспроизведения"
-          >
-            {formatSpeed(PLAYBACK_SPEEDS[speedIndex])}
-          </button>
-          <button
-            type="button"
-            className={styles.iconButton}
-            onClick={toggleMute}
-            aria-label={isMuted ? "Включить звук" : "Выключить звук"}
-          >
-            {isMuted ? <VolumeOffIcon /> : <VolumeUpIcon />}
-          </button>
-          {pipSupported && (
-            <button type="button" className={styles.iconButton} onClick={handlePipClick} aria-label="Картинка в картинке">
-              <PipIcon />
+          <div className={styles.seekRow}>
+            <span className={styles.time}>{formatTime(displayedTime)}</span>
+            <input
+              type="range"
+              className={styles.seekBar}
+              min={0}
+              max={progress.duration || 0}
+              step={0.5}
+              value={displayedTime}
+              onChange={(event) => setDragValue(Number(event.target.value))}
+              onPointerUp={(event) => {
+                const value = Number((event.target as HTMLInputElement).value);
+                playerRef.current?.seekTo(value);
+                setDragValue(null);
+                showControls();
+              }}
+            />
+            <span className={styles.time}>{formatTime(progress.duration)}</span>
+          </div>
+          <div className={styles.actionRow}>
+            <button
+              type="button"
+              className={styles.iconButton}
+              onClick={toggleMute}
+              aria-label={isMuted ? "Включить звук" : "Выключить звук"}
+            >
+              {isMuted ? <VolumeOffIcon /> : <VolumeUpIcon />}
             </button>
-          )}
-          {qualitySupported && (
             <button
               type="button"
               className={`${styles.iconButton} ${styles.speedButton}`}
-              onClick={cycleQuality}
-              aria-label="Качество видео"
+              onClick={cycleSpeed}
+              aria-label="Скорость воспроизведения"
             >
-              {qualityLabel ?? QUALITY_LABELS[playerRef.current?.getQuality?.() ?? "auto"] ?? "Авто"}
+              {formatSpeed(PLAYBACK_SPEEDS[speedIndex])}
             </button>
-          )}
-          <button
-            type="button"
-            className={styles.iconButton}
-            onClick={handleFullscreenClick}
-            aria-label={isFullscreen ? "Свернуть" : "Развернуть"}
-          >
-            {isFullscreen ? <CollapseIcon /> : <ExpandIcon />}
-          </button>
+            {qualitySupported && (
+              <button
+                type="button"
+                className={`${styles.iconButton} ${styles.speedButton}`}
+                onClick={cycleQuality}
+                aria-label="Качество видео"
+              >
+                {qualityLabel ?? QUALITY_LABELS[playerRef.current?.getQuality?.() ?? "auto"] ?? "Авто"}
+              </button>
+            )}
+            <span className={styles.actionSpacer} />
+            {pipSupported && (
+              <button type="button" className={styles.iconButton} onClick={handlePipClick} aria-label="Картинка в картинке">
+                <PipIcon />
+              </button>
+            )}
+            <button
+              type="button"
+              className={styles.iconButton}
+              onClick={handleFullscreenClick}
+              aria-label={isFullscreen ? "Свернуть" : "Развернуть"}
+            >
+              {isFullscreen ? <CollapseIcon /> : <ExpandIcon />}
+            </button>
+          </div>
         </div>
       </div>
     </div>
