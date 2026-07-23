@@ -129,3 +129,31 @@ video {
 svg {
   display: block;
 }
+
+/*
+ * Shared entrance animations — applied inline (style={{ animation: ... }})
+ * to plain conditionally-rendered/mapped elements (tab panels, search
+ * results, list items) that don't otherwise get one for free. Real
+ * open/close transitions for actual overlays (Modal, ChatDrawer, Snackbar)
+ * are handled where they're defined; these are for content that pops in
+ * and out with no transition system of its own.
+ */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}

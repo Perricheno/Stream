@@ -82,6 +82,7 @@ export function RoomToolbar({
                 lineHeight: "15px",
                 textAlign: "center",
                 pointerEvents: "none",
+                animation: "popIn 0.2s ease",
               }}
             >
               {unreadCount > 9 ? "9+" : unreadCount}

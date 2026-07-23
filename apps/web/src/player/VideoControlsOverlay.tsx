@@ -126,7 +126,8 @@ export function VideoControlsOverlay({
   // directly on the native player, not through this state).
   const [optimisticPlaying, setOptimisticPlaying] = useState<boolean | null>(null);
   const isPlaying = optimisticPlaying ?? progress.isPlaying;
-  const [volumeIndicator, setVolumeIndicator] = useState<number | null>(null);
+  const [volumeLevel, setVolumeLevel] = useState(1);
+  const [volumeIndicatorVisible, setVolumeIndicatorVisible] = useState(false);
   const lastVolumeRef = useRef(1);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>();
   const volumeHideTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -222,7 +223,8 @@ export function VideoControlsOverlay({
       } else {
         setIsMuted(true);
       }
-      setVolumeIndicator(nextVolume);
+      setVolumeLevel(nextVolume);
+      setVolumeIndicatorVisible(true);
       if (volumeHideTimer.current) clearTimeout(volumeHideTimer.current);
     },
     [playerRef],
@@ -236,7 +238,7 @@ export function VideoControlsOverlay({
       // one and misfire the double-tap-fullscreen gesture.
       lastTapRef.current = null;
       if (volumeHideTimer.current) clearTimeout(volumeHideTimer.current);
-      volumeHideTimer.current = setTimeout(() => setVolumeIndicator(null), 700);
+      volumeHideTimer.current = setTimeout(() => setVolumeIndicatorVisible(false), 700);
     }
   }, []);
 
@@ -309,18 +311,20 @@ export function VideoControlsOverlay({
       onPointerLeave={handleBackgroundPointerUp}
     >
       <div className={styles.scrim} data-visible={visible} data-playing={isPlaying} />
-      {volumeIndicator !== null && (
-        <div className={styles.volumeIndicator}>
-          {volumeIndicator > 0 ? <VolumeUpIcon /> : <VolumeOffIcon />}
-          <div className={styles.volumeTrack}>
-            <div className={styles.volumeFill} style={{ height: `${Math.round(volumeIndicator * 100)}%` }} />
-          </div>
+      <div className={styles.volumeIndicator} data-visible={volumeIndicatorVisible}>
+        {volumeLevel > 0 ? <VolumeUpIcon /> : <VolumeOffIcon />}
+        <div className={styles.volumeTrack}>
+          <div className={styles.volumeFill} style={{ height: `${Math.round(volumeLevel * 100)}%` }} />
         </div>
-      )}
+      </div>
       <div className={styles.controlsGroup} data-visible={visible}>
         <button type="button" className={styles.chatButton} onClick={onOpenChat} aria-label="Чат">
           <ChatIcon />
-          {unreadCount > 0 && <span className={styles.chatBadge}>{unreadCount > 9 ? "9+" : unreadCount}</span>}
+          {unreadCount > 0 && (
+            <span className={styles.chatBadge} style={{ animation: "popIn 0.2s ease" }}>
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
         </button>
         <button type="button" className={styles.playButton} onClick={togglePlayPause} aria-label="Play/Pause">
           {isPlaying ? <PauseIcon /> : <PlayIcon />}

@@ -211,19 +211,23 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
 
       <div className={`${styles.videoArea} ${room.source && !pickingSource ? styles.videoAreaCentered : ""}`}>
         {room.source && !pickingSource ? (
-          <VideoPlayer
-            source={room.source}
-            playerRef={synced.playerRef}
-            suppressed={synced.suppressed}
-            onPlay={synced.onPlay}
-            onPause={synced.onPause}
-            onSeek={synced.onSeek}
-            onEnded={handleEnded}
-            onOpenChat={() => setChatOpen(true)}
-            unreadCount={unreadCount}
-          />
+          <div key={JSON.stringify(room.source)} style={{ animation: "fadeIn 0.25s ease" }}>
+            <VideoPlayer
+              source={room.source}
+              playerRef={synced.playerRef}
+              suppressed={synced.suppressed}
+              onPlay={synced.onPlay}
+              onPause={synced.onPause}
+              onSeek={synced.onSeek}
+              onEnded={handleEnded}
+              onOpenChat={() => setChatOpen(true)}
+              unreadCount={unreadCount}
+            />
+          </div>
         ) : (
-          <VideoSourcePicker onSelect={changeSource} />
+          <div key="picker" style={{ animation: "fadeIn 0.2s ease" }}>
+            <VideoSourcePicker onSelect={changeSource} />
+          </div>
         )}
       </div>
 

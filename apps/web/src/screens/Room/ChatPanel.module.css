@@ -55,6 +55,7 @@
 
 .row {
   display: flex;
+  animation: fadeSlideUp 0.2s ease;
 }
 
 .rowOwn {

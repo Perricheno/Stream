@@ -60,11 +60,12 @@ export function ParticipantsModal({
     >
       <List>
         <Section>
-          {participants.map((participant) => {
+          {participants.map((participant, index) => {
             const kickable = isHost && participant.userId !== currentUserId;
             return (
               <Cell
                 key={participant.userId}
+                style={{ animation: "fadeSlideUp 0.25s ease backwards", animationDelay: `${Math.min(index, 8) * 30}ms` }}
                 before={
                   <Avatar
                     size={40}
