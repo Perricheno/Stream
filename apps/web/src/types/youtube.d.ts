@@ -17,6 +17,8 @@ declare namespace YT {
     width?: string | number;
     height?: string | number;
     videoId?: string;
+    /** e.g. "https://www.youtube-nocookie.com" for privacy-enhanced mode. */
+    host?: string;
     playerVars?: Record<string, unknown>;
     events?: {
       onReady?: (event: PlayerEvent) => void;

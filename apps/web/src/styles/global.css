@@ -33,6 +33,31 @@ body[data-theme="dark"] {
   --tg-theme-section-header-text-color: #6ab3f3 !important;
   --tg-theme-subtitle-text-color: #708499 !important;
   --tg-theme-section-separator-color: rgba(118, 118, 128, 0.2) !important;
+  /*
+   * telegram-ui has a SECOND, separate token system (--tgui--*) for surfaces
+   * Telegram's own theme params don't cover (tertiary/quaternary backgrounds,
+   * the segmented-control active pill, card backgrounds, etc). These are
+   * hardcoded light/dark values baked into the library, switched by a CSS
+   * class AppRoot applies based on its own appearance detection — and on at
+   * least one real Android device that detection didn't flip to dark in
+   * time, leaving e.g. the video-source tab switcher stuck rendering as a
+   * plain white pill while everything else (wired through --tg-theme-*)
+   * still looked correctly dark. Forcing these directly, the same way,
+   * closes that gap regardless of what AppRoot decides.
+   */
+  --tgui--tertiary_bg_color: #2a2a2a !important;
+  --tgui--quartenary_bg_color: #2f2f2f !important;
+  --tgui--segmented_control_active_bg: #2f2f2f !important;
+  --tgui--card_bg_color: #242424 !important;
+  --tgui--secondary_hint_color: #78797e !important;
+  --tgui--secondary_fill: rgba(41, 144, 255, 0.15) !important;
+  --tgui--divider: hsla(0, 0%, 100%, 0.05) !important;
+  --tgui--outline: hsla(0, 0%, 100%, 0.1) !important;
+  --tgui--surface_primary: hsla(0, 0%, 9%, 0.95) !important;
+  --tgui--plain_background: hsla(0, 0%, 100%, 0.08) !important;
+  --tgui--plain_foreground: hsla(0, 0%, 100%, 0.95) !important;
+  --tgui--green: #32e55e !important;
+  --tgui--destructive_background: rgba(255, 35, 35, 0.02) !important;
 }
 
 :root[data-theme="light"],
@@ -51,6 +76,19 @@ body[data-theme="light"] {
   --tg-theme-section-header-text-color: #3390ec !important;
   --tg-theme-subtitle-text-color: #707579 !important;
   --tg-theme-section-separator-color: rgba(0, 0, 0, 0.12) !important;
+  --tgui--tertiary_bg_color: #f4f4f7 !important;
+  --tgui--quartenary_bg_color: #f6f6fa !important;
+  --tgui--segmented_control_active_bg: #ffffff !important;
+  --tgui--card_bg_color: #ffffff !important;
+  --tgui--secondary_hint_color: #a2acb0 !important;
+  --tgui--secondary_fill: rgba(67, 120, 255, 0.1) !important;
+  --tgui--divider: rgba(0, 0, 0, 0.15) !important;
+  --tgui--outline: rgba(0, 0, 0, 0.05) !important;
+  --tgui--surface_primary: hsla(0, 0%, 100%, 0.95) !important;
+  --tgui--plain_background: rgba(0, 0, 0, 0.04) !important;
+  --tgui--plain_foreground: rgba(0, 0, 0, 0.8) !important;
+  --tgui--green: #31d158 !important;
+  --tgui--destructive_background: #e53935 !important;
 }
 
 * {
@@ -81,4 +119,13 @@ body {
 img,
 video {
   max-width: 100%;
+}
+
+/* SVGs default to display:inline, which — like text — reserves a sliver of
+   descender space below the glyph. Inside a flex-centered icon button, that
+   invisible gap nudges the icon a few px off true-center. Every hand-drawn
+   icon in this app is affected the same way; this is the actual fix, not a
+   per-icon one. */
+svg {
+  display: block;
 }

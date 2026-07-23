@@ -9,7 +9,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  touch-action: manipulation;
+  /* none, not manipulation — the vertical swipe-for-volume gesture is fully
+     JS-driven and must not compete with the browser's own pan/scroll
+     interpretation of the same drag. */
+  touch-action: none;
 }
 
 .scrim {
@@ -148,4 +151,37 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.volumeIndicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  pointer-events: none;
+}
+
+.volumeTrack {
+  width: 4px;
+  height: 64px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.volumeFill {
+  width: 100%;
+  border-radius: 2px;
+  background: #fff;
 }

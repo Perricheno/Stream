@@ -20,6 +20,10 @@ const QUALITY_LABELS: Record<string, string> = {
 };
 
 const AUTO_HIDE_MS = 2500;
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_MAX_DIST_PX = 40;
+const VOLUME_DRAG_THRESHOLD_PX = 12;
+const VOLUME_DRAG_RANGE_PX = 240;
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -105,8 +109,12 @@ export function VideoControlsOverlay({ playerRef, progress, isFullscreen, onTogg
   // directly on the native player, not through this state).
   const [optimisticPlaying, setOptimisticPlaying] = useState<boolean | null>(null);
   const isPlaying = optimisticPlaying ?? progress.isPlaying;
+  const [volumeIndicator, setVolumeIndicator] = useState<number | null>(null);
   const lastVolumeRef = useRef(1);
   const hideTimer = useRef<ReturnType<typeof setTimeout>>();
+  const volumeHideTimer = useRef<ReturnType<typeof setTimeout>>();
+  const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
+  const gestureRef = useRef<{ startX: number; startY: number; startVolume: number; isDragging: boolean } | null>(null);
 
   useEffect(() => {
     if (optimisticPlaying !== null && progress.isPlaying === optimisticPlaying) {
@@ -129,8 +137,91 @@ export function VideoControlsOverlay({ playerRef, progress, isFullscreen, onTogg
     scheduleHide();
     return () => {
       if (hideTimer.current) clearTimeout(hideTimer.current);
+      if (volumeHideTimer.current) clearTimeout(volumeHideTimer.current);
     };
   }, [scheduleHide]);
+
+  // Single handler covers three things at once: revealing the controls on
+  // any tap, detecting a double-tap (within DOUBLE_TAP_MS, close together)
+  // to toggle fullscreen, and arming a possible vertical volume drag. Taps
+  // that land on an actual button/input are excluded from the gesture so
+  // they don't fight the seek bar or icon buttons — `.closest` is needed
+  // (not `event.target === event.currentTarget`) because once the controls
+  // are visible, `.controlsGroup` itself becomes the real tap target, not
+  // just the root `.overlay`.
+  const handleBackgroundPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      showControls();
+      const target = event.target as HTMLElement;
+      if (target.closest("button, input")) {
+        gestureRef.current = null;
+        return;
+      }
+
+      const x = event.clientX;
+      const y = event.clientY;
+      const now = Date.now();
+      const lastTap = lastTapRef.current;
+      const isDoubleTap =
+        lastTap !== null &&
+        now - lastTap.time < DOUBLE_TAP_MS &&
+        Math.hypot(x - lastTap.x, y - lastTap.y) < DOUBLE_TAP_MAX_DIST_PX;
+
+      if (isDoubleTap) {
+        lastTapRef.current = null;
+        gestureRef.current = null;
+        onToggleFullscreen();
+        showControls();
+        return;
+      }
+
+      lastTapRef.current = { time: now, x, y };
+      gestureRef.current = {
+        startX: x,
+        startY: y,
+        startVolume: playerRef.current?.getVolume() ?? 1,
+        isDragging: false,
+      };
+    },
+    [showControls, playerRef, onToggleFullscreen],
+  );
+
+  const handleBackgroundPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const gesture = gestureRef.current;
+      if (!gesture) return;
+      const deltaY = gesture.startY - event.clientY;
+      if (!gesture.isDragging) {
+        if (Math.abs(deltaY) < VOLUME_DRAG_THRESHOLD_PX) return;
+        gesture.isDragging = true;
+      }
+      const player = playerRef.current;
+      if (!player) return;
+      const nextVolume = Math.min(1, Math.max(0, gesture.startVolume + deltaY / VOLUME_DRAG_RANGE_PX));
+      player.setVolume(nextVolume);
+      if (nextVolume > 0) {
+        lastVolumeRef.current = nextVolume;
+        setIsMuted(false);
+      } else {
+        setIsMuted(true);
+      }
+      setVolumeIndicator(nextVolume);
+      if (volumeHideTimer.current) clearTimeout(volumeHideTimer.current);
+    },
+    [playerRef],
+  );
+
+  const handleBackgroundPointerUp = useCallback(() => {
+    const gesture = gestureRef.current;
+    gestureRef.current = null;
+    if (gesture?.isDragging) {
+      // A drag isn't a tap — don't let the next real tap pair up with this
+      // one and misfire the double-tap-fullscreen gesture.
+      lastTapRef.current = null;
+      if (volumeHideTimer.current) clearTimeout(volumeHideTimer.current);
+      volumeHideTimer.current = setTimeout(() => setVolumeIndicator(null), 700);
+    }
+  }, []);
 
   const togglePlayPause = useCallback(() => {
     const player = playerRef.current;
@@ -193,8 +284,22 @@ export function VideoControlsOverlay({ playerRef, progress, isFullscreen, onTogg
   const qualitySupported = availableQualities.length > 1;
 
   return (
-    <div className={styles.overlay} onPointerDown={showControls}>
+    <div
+      className={styles.overlay}
+      onPointerDown={handleBackgroundPointerDown}
+      onPointerMove={handleBackgroundPointerMove}
+      onPointerUp={handleBackgroundPointerUp}
+      onPointerLeave={handleBackgroundPointerUp}
+    >
       <div className={styles.scrim} data-visible={visible} data-playing={isPlaying} />
+      {volumeIndicator !== null && (
+        <div className={styles.volumeIndicator}>
+          {volumeIndicator > 0 ? <VolumeUpIcon /> : <VolumeOffIcon />}
+          <div className={styles.volumeTrack}>
+            <div className={styles.volumeFill} style={{ height: `${Math.round(volumeIndicator * 100)}%` }} />
+          </div>
+        </div>
+      )}
       <div className={styles.controlsGroup} data-visible={visible}>
         <button type="button" className={styles.playButton} onClick={togglePlayPause} aria-label="Play/Pause">
           {isPlaying ? <PauseIcon /> : <PlayIcon />}

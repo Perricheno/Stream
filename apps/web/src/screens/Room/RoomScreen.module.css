@@ -33,7 +33,10 @@
 }
 
 .videoArea {
-  padding: 12px 16px;
+  /* Deliberately thin top gap — video should sit right under the toolbar
+     row (YouTube-app-like), not float mid-screen with a lot of dead space
+     above it. */
+  padding: 4px 16px 12px;
 }
 
 .chatFill {

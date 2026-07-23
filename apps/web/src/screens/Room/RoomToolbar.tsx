@@ -39,7 +39,7 @@ export function RoomToolbar({
   };
 
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px 0" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 0" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
         <Caption level="1" style={{ color: "var(--tg-theme-hint-color, #708499)" }}>
           Комната {roomId}

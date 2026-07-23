@@ -4,6 +4,7 @@ import { shareURL } from "@telegram-apps/sdk-react";
 import type { VideoSource } from "@stream/shared";
 import { useBackButton } from "../../telegram/useBackButton";
 import { useClosingConfirmation } from "../../telegram/useClosingConfirmation";
+import { useVisualViewportHeight } from "../../telegram/useVisualViewportHeight";
 import { useHapticFeedback } from "../../telegram/useHapticFeedback";
 import { useTelegramUser } from "../../telegram/useInitData";
 import { useProfile } from "../../telegram/ProfileContext";
@@ -17,6 +18,7 @@ import { StickerPlayer } from "../../stickers/StickerPlayer";
 import { SettingsPanel } from "../Settings/SettingsPanel";
 import { FriendsPanel } from "../Friends/FriendsPanel";
 import { ParticipantsBar } from "./ParticipantsBar";
+import { ParticipantsModal } from "./ParticipantsModal";
 import { VideoSourcePicker } from "./VideoSourcePicker";
 import { QueuePanel } from "./QueuePanel";
 import { RoomQrModal } from "./RoomQrModal";
@@ -43,6 +45,8 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
+  const [participantsOpen, setParticipantsOpen] = useState(false);
+  const visualViewportHeight = useVisualViewportHeight();
   const [pickingSource, setPickingSource] = useState(false);
   const [hostToast, setHostToast] = useState<string | null>(null);
   const autoplayedSourceRef = useRef<string | null>(null);
@@ -78,11 +82,12 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
 
   const handleBack = useCallback(async () => {
     const confirmed = await confirmAction(
-      "Просмотр продолжится для остальных участников.",
-      "Покинуть комнату?",
+      t("leaveRoomDescription"),
+      t("leaveRoomTitle"),
+      t("leaveRoom"),
     );
     if (confirmed) onExit();
-  }, [onExit]);
+  }, [onExit, t]);
   useBackButton(true, handleBack);
   // Covers closing via Telegram's own X/swipe-down — handleBack above only
   // intercepts in-app navigation (our custom back button), not that.
@@ -95,8 +100,8 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
       haptics.notify("error");
       return;
     }
-    shareURL(inviteUrl, "Присоединяйся к просмотру!");
-  }, [inviteUrl, haptics]);
+    shareURL(inviteUrl, t("shareRoomText"));
+  }, [inviteUrl, haptics, t]);
 
   useEffect(() => {
     if (status === "joined") haptics.notify("success");
@@ -144,7 +149,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
 
   if (status === "idle" || status === "connecting") {
     return (
-      <Placeholder header="Подключаемся..." description={`Комната ${roomId}`}>
+      <Placeholder header={t("connecting")} description={`${t("roomCode")} ${roomId}`}>
         <StickerPlayer id="calling" size={120} />
       </Placeholder>
     );
@@ -152,7 +157,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
 
   if (status === "kicked") {
     return (
-      <Placeholder header="Вас удалили из комнаты" description="Хост завершил ваше участие в этой комнате">
+      <Placeholder header={t("kickedTitle")} description={t("kickedDescription")}>
         <StickerPlayer id="blocked" size={120} />
       </Placeholder>
     );
@@ -160,14 +165,14 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
 
   if (status === "error" || !room) {
     return (
-      <Placeholder header="Не получилось войти" description={error ?? "Попробуйте ещё раз"}>
+      <Placeholder header={t("joinErrorTitle")} description={error ?? t("joinErrorRetry")}>
         <StickerPlayer id="blocked" size={120} />
       </Placeholder>
     );
   }
 
   return (
-    <div className={styles.screen}>
+    <div className={styles.screen} style={visualViewportHeight ? { height: visualViewportHeight } : undefined}>
       <div className={styles.top}>
         <RoomToolbar
           roomId={roomId}
@@ -181,12 +186,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
           onShowQr={() => (inviteUrl ? setQrOpen(true) : haptics.notify("error"))}
           onLeave={handleBack}
         />
-        <ParticipantsBar
-          participants={room.participants}
-          currentUserId={telegramUser?.id}
-          isHost={isHost}
-          onKick={kickParticipant}
-        />
+        <ParticipantsBar participants={room.participants} onOpen={() => setParticipantsOpen(true)} />
 
         <div className={styles.videoArea}>
           {room.source && !pickingSource ? (
@@ -212,6 +212,15 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
         onSend={sendChat}
       />
 
+      <ParticipantsModal
+        open={participantsOpen}
+        onOpenChange={setParticipantsOpen}
+        participants={room.participants}
+        currentUserId={telegramUser?.id}
+        isHost={isHost}
+        onKick={kickParticipant}
+        onInvite={() => setFriendsOpen(true)}
+      />
       <FriendsPanel open={friendsOpen} onOpenChange={setFriendsOpen} roomId={roomId} />
       <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
       <QueuePanel
