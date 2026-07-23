@@ -25,6 +25,7 @@ export function ParticipantsBar({ participants, currentUserId, isHost, onKick }:
     const confirmed = await confirmAction(
       `${participant.firstName} больше не сможет находиться в этой комнате.`,
       "Удалить участника?",
+      "Удалить",
     );
     if (confirmed) onKick(participant.userId);
   };

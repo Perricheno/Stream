@@ -23,13 +23,27 @@ function rowToProfile(row: UserRow): UserProfile {
   };
 }
 
-/** Creates the user row on first sight (e.g. first initData validation), leaving existing preferences untouched. */
+/**
+ * Creates the user row on first sight (e.g. first initData validation),
+ * leaving existing preferences untouched. This runs on every authenticated
+ * request (socket connect and every REST call), so it skips the write
+ * entirely once name/photo already match — otherwise every single request,
+ * including plain reads like GET /profile, would cost a write on top of it.
+ */
 export function upsertUser(user: { id: number; firstName: string; photoUrl?: string }): void {
+  const existing = db.prepare(`SELECT first_name, photo_url FROM users WHERE user_id = ?`).get(user.id) as
+    | { first_name: string; photo_url: string | null }
+    | undefined;
+
+  if (existing && existing.first_name === user.firstName && (existing.photo_url ?? null) === (user.photoUrl ?? null)) {
+    return;
+  }
+
   const now = Date.now();
   db.prepare(
     `INSERT INTO users (user_id, first_name, photo_url, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET first_name = excluded.first_name, photo_url = excluded.photo_url`,
+     ON CONFLICT(user_id) DO UPDATE SET first_name = excluded.first_name, photo_url = excluded.photo_url, updated_at = excluded.updated_at`,
   ).run(user.id, user.firstName, user.photoUrl ?? null, now, now);
 }
 

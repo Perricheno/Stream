@@ -6,13 +6,13 @@ import { isTMA, popup } from "@telegram-apps/sdk-react";
  * mocked environment never answers `web_app_open_popup` and the promise
  * would otherwise hang forever.
  */
-export async function confirmAction(message: string, title?: string): Promise<boolean> {
+export async function confirmAction(message: string, title?: string, confirmText = "Покинуть"): Promise<boolean> {
   if (isTMA("simple") && popup.open.isAvailable()) {
     const buttonId = await popup.open({
       title,
       message,
       buttons: [
-        { id: "confirm", type: "destructive", text: "Покинуть" },
+        { id: "confirm", type: "destructive", text: confirmText },
         { id: "cancel", type: "cancel" },
       ],
     });

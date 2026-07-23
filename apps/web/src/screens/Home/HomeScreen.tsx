@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Button, Cell, IconButton, Input, List, Modal, Section } from "@telegram-apps/telegram-ui";
 import { openQrScanner } from "@telegram-apps/sdk-react";
 import { parseRoomCodeFromScan } from "../../app/parseRoomLink";
@@ -11,10 +11,14 @@ import { useTranslation } from "../../i18n/useTranslation";
 import { StickerPlayer } from "../../stickers/StickerPlayer";
 import { ServiceStatusIndicator } from "../../status/ServiceStatusIndicator";
 import { ModalBackdrop } from "../../components/ModalBackdrop";
-import { SettingsPanel } from "../Settings/SettingsPanel";
-import { FriendsPanel } from "../Friends/FriendsPanel";
 import { CreateRoomCard } from "./CreateRoomCard";
 import { RecentRoomsList } from "./RecentRoomsList";
+
+// Both are modals only needed once actually opened — Home is the one screen
+// that's never itself lazy, so anything imported eagerly here ships in the
+// main bundle for every user regardless of whether they ever open either.
+const SettingsPanel = lazy(() => import("../Settings/SettingsPanel").then((m) => ({ default: m.SettingsPanel })));
+const FriendsPanel = lazy(() => import("../Friends/FriendsPanel").then((m) => ({ default: m.FriendsPanel })));
 
 function GearIcon() {
   return (
@@ -75,8 +79,19 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
   const [joinOpen, setJoinOpen] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
+  const [friendsLoaded, setFriendsLoaded] = useState(false);
   const autoAddedRef = useRef(false);
+
+  const openSettings = useCallback(() => {
+    setSettingsLoaded(true);
+    setSettingsOpen(true);
+  }, []);
+  const openFriends = useCallback(() => {
+    setFriendsLoaded(true);
+    setFriendsOpen(true);
+  }, []);
 
   useEffect(() => {
     if (!autoAddFriendId || autoAddedRef.current) return;
@@ -84,10 +99,10 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
     addFriend(autoAddFriendId)
       .then(() => {
         haptics.notify("success");
-        setFriendsOpen(true);
+        openFriends();
       })
       .catch(() => haptics.notify("error"));
-  }, [autoAddFriendId, addFriend, haptics]);
+  }, [autoAddFriendId, addFriend, haptics, openFriends]);
 
   const createRoom = useCallback(() => {
     haptics.impact("medium");
@@ -140,10 +155,10 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
             {fullscreen.isFullscreen ? <CollapseIcon /> : <ExpandIcon />}
           </IconButton>
         )}
-        <IconButton mode="plain" size="m" onClick={() => setFriendsOpen(true)} aria-label={t("friends")}>
+        <IconButton mode="plain" size="m" onClick={openFriends} aria-label={t("friends")}>
           <PeopleIcon />
         </IconButton>
-        <IconButton mode="plain" size="m" onClick={() => setSettingsOpen(true)} aria-label={t("settings")}>
+        <IconButton mode="plain" size="m" onClick={openSettings} aria-label={t("settings")}>
           <GearIcon />
         </IconButton>
       </div>
@@ -190,8 +205,16 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
         </div>
       </Modal>
 
-      <FriendsPanel open={friendsOpen} onOpenChange={setFriendsOpen} />
-      <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
+      {friendsLoaded && (
+        <Suspense fallback={null}>
+          <FriendsPanel open={friendsOpen} onOpenChange={setFriendsOpen} />
+        </Suspense>
+      )}
+      {settingsLoaded && (
+        <Suspense fallback={null}>
+          <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
+        </Suspense>
+      )}
     </List>
   );
 }

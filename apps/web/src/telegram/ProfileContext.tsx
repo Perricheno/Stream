@@ -39,8 +39,19 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateProfile = useCallback((patch: Partial<UserProfile>) => {
-    setProfile((prev) => (prev ? { ...prev, ...patch } : prev));
-    api.patch<UserProfile>("/profile", patch).then(setProfile).catch(() => {});
+    let previous: UserProfile | null = null;
+    setProfile((prev) => {
+      previous = prev;
+      return prev ? { ...prev, ...patch } : prev;
+    });
+    api
+      .patch<UserProfile>("/profile", patch)
+      .then(setProfile)
+      .catch(() => {
+        // The optimistic update above never actually saved — roll it back
+        // instead of leaving the UI showing a setting that isn't real.
+        setProfile(previous);
+      });
   }, []);
 
   return <ProfileContext.Provider value={{ profile, loaded, updateProfile }}>{children}</ProfileContext.Provider>;

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useLaunchParams } from "@telegram-apps/sdk-react";
 import { Placeholder, Spinner } from "@telegram-apps/telegram-ui";
 import { HomeScreen } from "../screens/Home/HomeScreen";
@@ -6,7 +6,8 @@ import { HomeScreen } from "../screens/Home/HomeScreen";
 // Room pulls in socket.io-client, hls.js, the YouTube adapter and lottie-web —
 // keep it out of the initial bundle so Home (the more frequently hit screen)
 // stays fast to load.
-const RoomScreen = lazy(() => import("../screens/Room/RoomScreen").then((m) => ({ default: m.RoomScreen })));
+const loadRoomScreen = () => import("../screens/Room/RoomScreen").then((m) => ({ default: m.RoomScreen }));
+const RoomScreen = lazy(loadRoomScreen);
 
 const START_PARAM_ROOM_PREFIX = "room_";
 const START_PARAM_ADD_FRIEND_PREFIX = "addfriend_";
@@ -39,6 +40,14 @@ export function AppRouter() {
 
   const openRoom = useCallback((id: string) => navigateWithTransition(() => setRoomId(id)), []);
   const goHome = useCallback(() => navigateWithTransition(() => setRoomId(null)), []);
+
+  // Prefetch the Room screen's chunk while the user's still on Home, so the
+  // near-certain first room-entry doesn't have to wait on the import —
+  // without this, tapping "Create"/"Join" always shows a loading spinner
+  // for however long that chunk takes to fetch and parse.
+  useEffect(() => {
+    if (!roomId) void loadRoomScreen();
+  }, [roomId]);
 
   if (roomId) {
     return (

@@ -12,9 +12,23 @@ export function useHomeScreenPrompt(): { canPrompt: boolean; prompt: () => void 
 
   useEffect(() => {
     if (!checkHomeScreenStatus.isAvailable()) return;
-    checkHomeScreenStatus()
-      .then((result) => setStatus(result))
-      .catch(() => setStatus(null));
+    let cancelled = false;
+    // checkHomeScreenStatus() resolves to ANOTHER promise (doubly wrapped),
+    // not directly the status string — a single .then() was storing that
+    // inner promise object as "status", so canPrompt (status === "missed")
+    // was always false and the banner never actually appeared.
+    (async () => {
+      try {
+        const inner = await checkHomeScreenStatus();
+        const result = await inner;
+        if (!cancelled) setStatus(result);
+      } catch {
+        if (!cancelled) setStatus(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

@@ -28,4 +28,9 @@ db.exec(`
     created_at INTEGER NOT NULL,
     PRIMARY KEY (user_a, user_b)
   );
+
+  -- The composite PK above only indexes the user_a side of
+  -- "WHERE user_a = ? OR user_b = ?" (see friendRepository.ts) — this covers
+  -- the user_b side so both directions of a friend lookup stay indexed.
+  CREATE INDEX IF NOT EXISTS idx_friendships_user_b ON friendships(user_b);
 `);

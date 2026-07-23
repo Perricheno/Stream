@@ -1,5 +1,7 @@
 import { env } from "../config/env";
 
+const FETCH_TIMEOUT_MS = 8_000;
+
 /**
  * Sends a message to a user via the Bot API. Only works if that user has
  * already started a conversation with the bot (Telegram restriction) — true
@@ -22,10 +24,22 @@ export async function sendTelegramMessage(
     body.reply_markup = { inline_keyboard: [[{ text: inlineButton.text, url: inlineButton.url }]] };
   }
 
-  const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return res.ok;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    return res.ok;
+  } catch {
+    // Timed out, or a network-level failure — the caller only needs a
+    // boolean, and a hung/failed request shouldn't propagate as an
+    // unhandled rejection into the route handler.
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
 }

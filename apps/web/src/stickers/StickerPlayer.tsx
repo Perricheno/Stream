@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import lottie, { type AnimationItem } from "lottie-web";
+import type { AnimationItem } from "lottie-web";
 import { STICKERS, type StickerId } from "./stickers.manifest";
 import { loadTgsAnimation } from "./tgsLoader";
 
@@ -21,7 +21,11 @@ export function StickerPlayer({ id, size = 96, loop = true, autoplay = true, cla
     let animation: AnimationItem | undefined;
     let cancelled = false;
 
-    loadTgsAnimation(STICKERS[id]).then((animationData) => {
+    // lottie-web (the rendering engine) is loaded on demand alongside the
+    // sticker data, rather than eagerly at module scope — Home renders
+    // StickerPlayer unconditionally, so an eager import would ship the whole
+    // animation engine in the main bundle before any sticker is even shown.
+    Promise.all([import("lottie-web"), loadTgsAnimation(STICKERS[id])]).then(([{ default: lottie }, animationData]) => {
       if (cancelled || !container) return;
       animation = lottie.loadAnimation({
         container,
