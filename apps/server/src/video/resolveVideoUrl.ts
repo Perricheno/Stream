@@ -96,9 +96,20 @@ async function resolveInner(rawUrl: string, depth: number): Promise<VideoSource 
 
   // Fallback для сторонних плееров
   const embed = candidates.find((candidate) => looksLikeEmbedPlayer(candidate, page.finalUrl));
-  if (embed) return { type: "iframe", url: embed };
+  if (embed) return { type: "iframe", url: embed, title: extractTitle(page.body) ?? undefined };
 
-  return null;
+  // Last resort: the page loaded fine but nothing recognizable as "the
+  // video" was found in it — embed the page itself rather than failing
+  // outright. Sync won't work (same as any other iframe source) and some
+  // sites block being framed, but this beats a flat rejection for anything
+  // that isn't blocked, when the alternative is a dead end either way.
+  return { type: "iframe", url: page.finalUrl, title: extractTitle(page.body) ?? undefined };
+}
+
+function extractTitle(html: string): string | null {
+  const match = /<title[^>]*>([^<]*)<\/title>/i.exec(html);
+  const title = match?.[1]?.trim();
+  return title ? title.slice(0, 200) : null;
 }
 
 function looksLikeEmbedPlayer(url: string, pageUrl: string): boolean {

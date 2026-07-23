@@ -1,5 +1,5 @@
 import { lookup } from "node:dns/promises";
-import { lookup as lookupCallback, type LookupAllOptions, type LookupOneOptions } from "node:dns";
+import { lookup as lookupCallback, type LookupAddress, type LookupAllOptions, type LookupOneOptions } from "node:dns";
 import { isIP } from "node:net";
 
 /**
@@ -43,24 +43,39 @@ export async function assertPublicHttpUrl(rawUrl: string): Promise<URL> {
  * alternates between a public and a private address per query defeats a
  * "check, then separately fetch" guard; pinning to a single resolution here
  * closes that gap.
+ *
+ * Must mirror `dns.lookup`'s actual calling convention exactly: Node's own
+ * connection logic (Happy Eyeballs / family autoselection) calls this with
+ * `options.all` sometimes true and sometimes false/absent, and expects the
+ * callback shape to match — `(err, addresses[])` for the former, `(err,
+ * address, family)` for the latter. Always responding in the single-address
+ * form (regardless of what was actually asked for) reliably confused Node's
+ * internal address-selection code into throwing ERR_INVALID_IP_ADDRESS.
  */
 export function pinnedPublicLookup(
   hostname: string,
-  _options: LookupOneOptions | LookupAllOptions | number,
-  callback: (err: NodeJS.ErrnoException | null, address: string, family: number) => void,
+  options: LookupOneOptions | LookupAllOptions | number,
+  callback: (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void,
 ): void {
+  const wantsAll = typeof options === "object" && options !== null && options.all === true;
+
   lookupCallback(hostname, { all: true }, (err, addresses) => {
     if (err) {
-      callback(err, "", 4);
+      callback(err, wantsAll ? [] : "");
       return;
     }
-    const list = addresses as { address: string; family: number }[];
-    const valid = list.find((entry) => !isPrivateOrReservedIp(entry.address));
-    if (!valid) {
-      callback(new Error("refusing to fetch a private/internal address") as NodeJS.ErrnoException, "", 4);
+    const list = addresses as LookupAddress[];
+    const validList = list.filter((entry) => !isPrivateOrReservedIp(entry.address));
+    if (validList.length === 0) {
+      const refusal = new Error("refusing to fetch a private/internal address") as NodeJS.ErrnoException;
+      callback(refusal, wantsAll ? [] : "");
       return;
     }
-    callback(null, valid.address, valid.family);
+    if (wantsAll) {
+      callback(null, validList);
+    } else {
+      callback(null, validList[0].address, validList[0].family);
+    }
   });
 }
 
