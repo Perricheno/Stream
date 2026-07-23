@@ -26,12 +26,29 @@ export function FriendsPanel({ open, onOpenChange, roomId }: FriendsPanelProps) 
   const [toast, setToast] = useState<string | null>(null);
   const [invitingId, setInvitingId] = useState<number | null>(null);
 
-  const addFriend = useCallback(() => {
+  const addFriend = useCallback(async () => {
     if (!BOT_USERNAME || !me) {
       haptics.notify("error");
+      setToast(t("addFriendFailed"));
       return;
     }
-    shareURL(`https://t.me/${BOT_USERNAME}?startapp=addfriend_${me.id}`, t("addFriendShareText"));
+    const url = `https://t.me/${BOT_USERNAME}?startapp=addfriend_${me.id}`;
+    try {
+      // Opens Telegram's own contact/chat picker — by design this hands off
+      // to a native flow and closes the Mini App. It has no isAvailable()
+      // guard, so an unsupported client throws here rather than no-oping;
+      // previously nothing caught that, so a tap could silently do nothing.
+      shareURL(url, t("addFriendShareText"));
+    } catch {
+      try {
+        await navigator.clipboard.writeText(url);
+        haptics.notify("success");
+        setToast(t("linkCopied"));
+      } catch {
+        haptics.notify("error");
+        setToast(t("addFriendFailed"));
+      }
+    }
   }, [me, haptics, t]);
 
   const inviteFriend = useCallback(
