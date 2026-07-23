@@ -28,18 +28,28 @@
   padding-right: var(--tg-viewport-safe-area-inset-right, 0px);
 }
 
-.top {
+.header {
   flex-shrink: 0;
 }
 
 .videoArea {
-  /* Deliberately thin top gap — video should sit right under the toolbar
-     row (YouTube-app-like), not float mid-screen with a lot of dead space
-     above it. */
+  /* Chat is no longer permanently docked below the video (see ChatDrawer),
+     so this now owns the rest of the screen instead of a thin strip above a
+     chat feed. Plain top-aligned + scrollable by default — the source
+     picker's content (forms, search results) can be taller than the
+     available space and must scroll, not center-and-clip. */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding: 4px 16px 12px;
 }
 
-.chatFill {
-  flex: 1;
-  min-height: 0;
+.videoAreaCentered {
+  /* Applied only while an actual video is showing (see RoomScreen.tsx) —
+     its aspect-ratio box is reliably shorter than the available space, so
+     centering it here (rather than leaving it flush under the toolbar) is
+     safe, unlike the source picker's variable-height content above. */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }

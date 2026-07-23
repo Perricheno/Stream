@@ -11,11 +11,23 @@ interface VideoPlayerProps extends PlayerAdapterEvents {
   source: VideoSource;
   suppressed: React.MutableRefObject<boolean>;
   playerRef: RefObject<PlayerHandle>;
+  onOpenChat: () => void;
+  unreadCount: number;
 }
 
 /** Single entry point the app renders — picks the right adapter, and owns the
  * aspect-ratio container plus the custom minimal controls overlay. */
-export function VideoPlayer({ source, playerRef, suppressed, onPlay, onPause, onSeek, onEnded }: VideoPlayerProps) {
+export function VideoPlayer({
+  source,
+  playerRef,
+  suppressed,
+  onPlay,
+  onPause,
+  onSeek,
+  onEnded,
+  onOpenChat,
+  unreadCount,
+}: VideoPlayerProps) {
   const progress = usePlayerProgress(playerRef);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -47,6 +59,8 @@ export function VideoPlayer({ source, playerRef, suppressed, onPlay, onPause, on
         progress={progress}
         isFullscreen={isFullscreen}
         onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
+        onOpenChat={onOpenChat}
+        unreadCount={unreadCount}
       />
     </div>
   );

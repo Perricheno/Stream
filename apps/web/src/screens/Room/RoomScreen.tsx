@@ -24,7 +24,7 @@ import { QueuePanel } from "./QueuePanel";
 import { RoomQrModal } from "./RoomQrModal";
 import { parseVideoUrl } from "./parseVideoUrl";
 import { RoomToolbar } from "./RoomToolbar";
-import { ChatPanel } from "./ChatPanel";
+import { ChatDrawer } from "./ChatDrawer";
 import styles from "./RoomScreen.module.css";
 
 const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME as string | undefined;
@@ -46,11 +46,14 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
   const [queueOpen, setQueueOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [participantsOpen, setParticipantsOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const visualViewportHeight = useVisualViewportHeight();
   const [pickingSource, setPickingSource] = useState(false);
   const [hostToast, setHostToast] = useState<string | null>(null);
   const autoplayedSourceRef = useRef<string | null>(null);
   const lastParticipantCountRef = useRef<number | null>(null);
+  const lastMessageCountRef = useRef<number | null>(null);
   const lastHostIdRef = useRef<number | null>(null);
   const isHostRef = useRef(false);
   const currentHostId = room?.participants.find((p) => p.isHost)?.userId ?? null;
@@ -118,6 +121,21 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
     haptics.selectionChanged();
   }, [room?.participants.length, profile?.notificationsEnabled, haptics, room]);
 
+  // Badge the chat toggle with new messages that arrived while the drawer
+  // was closed — chat is no longer permanently docked on screen, so this is
+  // the only signal that something new came in while watching.
+  useEffect(() => {
+    const count = room?.messages.length ?? 0;
+    const previous = lastMessageCountRef.current;
+    lastMessageCountRef.current = count;
+    if (previous === null || chatOpen || count <= previous) return;
+    setUnreadCount((n) => n + (count - previous));
+  }, [room?.messages.length, chatOpen]);
+
+  useEffect(() => {
+    if (chatOpen) setUnreadCount(0);
+  }, [chatOpen]);
+
   const changeSource = useCallback((source: VideoSource) => {
     socket.emit("playback:change-source", { source });
     setPickingSource(false);
@@ -173,7 +191,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
 
   return (
     <div className={styles.screen} style={visualViewportHeight ? { height: visualViewportHeight } : undefined}>
-      <div className={styles.top}>
+      <div className={styles.header}>
         <RoomToolbar
           roomId={roomId}
           onShare={handleShare}
@@ -185,28 +203,33 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
           queueCount={room.queue.length}
           onShowQr={() => (inviteUrl ? setQrOpen(true) : haptics.notify("error"))}
           onLeave={handleBack}
+          onOpenChat={() => setChatOpen(true)}
+          unreadCount={unreadCount}
         />
         <ParticipantsBar participants={room.participants} onOpen={() => setParticipantsOpen(true)} />
-
-        <div className={styles.videoArea}>
-          {room.source && !pickingSource ? (
-            <VideoPlayer
-              source={room.source}
-              playerRef={synced.playerRef}
-              suppressed={synced.suppressed}
-              onPlay={synced.onPlay}
-              onPause={synced.onPause}
-              onSeek={synced.onSeek}
-              onEnded={handleEnded}
-            />
-          ) : (
-            <VideoSourcePicker onSelect={changeSource} />
-          )}
-        </div>
       </div>
 
-      <ChatPanel
-        className={styles.chatFill}
+      <div className={`${styles.videoArea} ${room.source && !pickingSource ? styles.videoAreaCentered : ""}`}>
+        {room.source && !pickingSource ? (
+          <VideoPlayer
+            source={room.source}
+            playerRef={synced.playerRef}
+            suppressed={synced.suppressed}
+            onPlay={synced.onPlay}
+            onPause={synced.onPause}
+            onSeek={synced.onSeek}
+            onEnded={handleEnded}
+            onOpenChat={() => setChatOpen(true)}
+            unreadCount={unreadCount}
+          />
+        ) : (
+          <VideoSourcePicker onSelect={changeSource} />
+        )}
+      </div>
+
+      <ChatDrawer
+        open={chatOpen}
+        onOpenChange={setChatOpen}
         messages={room.messages}
         currentUserId={telegramUser?.id}
         onSend={sendChat}

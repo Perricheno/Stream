@@ -89,14 +89,31 @@ function VolumeOffIcon() {
   );
 }
 
+function ChatIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H8l-4.7 3.53A.5.5 0 0 1 2.5 20V5a1 1 0 0 1 1-1z" />
+    </svg>
+  );
+}
+
 interface VideoControlsOverlayProps {
   playerRef: React.RefObject<PlayerHandle>;
   progress: PlayerProgress;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
+  onOpenChat: () => void;
+  unreadCount: number;
 }
 
-export function VideoControlsOverlay({ playerRef, progress, isFullscreen, onToggleFullscreen }: VideoControlsOverlayProps) {
+export function VideoControlsOverlay({
+  playerRef,
+  progress,
+  isFullscreen,
+  onToggleFullscreen,
+  onOpenChat,
+  unreadCount,
+}: VideoControlsOverlayProps) {
   const [visible, setVisible] = useState(true);
   const [dragValue, setDragValue] = useState<number | null>(null);
   const [isMuted, setIsMuted] = useState(false);
@@ -301,6 +318,10 @@ export function VideoControlsOverlay({ playerRef, progress, isFullscreen, onTogg
         </div>
       )}
       <div className={styles.controlsGroup} data-visible={visible}>
+        <button type="button" className={styles.chatButton} onClick={onOpenChat} aria-label="Чат">
+          <ChatIcon />
+          {unreadCount > 0 && <span className={styles.chatBadge}>{unreadCount > 9 ? "9+" : unreadCount}</span>}
+        </button>
         <button type="button" className={styles.playButton} onClick={togglePlayPause} aria-label="Play/Pause">
           {isPlaying ? <PauseIcon /> : <PlayIcon />}
         </button>
