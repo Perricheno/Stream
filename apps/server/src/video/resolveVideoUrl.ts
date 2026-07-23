@@ -172,8 +172,14 @@ function fetchOnce(url: URL): Promise<HopResult> {
         lookup: pinnedPublicLookup,
         timeout: FETCH_TIMEOUT_MS,
         headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; StreamLinkResolver/1.0)",
-          Accept: "text/html,application/xhtml+xml,video/*;q=0.9,*/*;q=0.8",
+          // A self-identifying bot UA gets flatly blocked (403/connection
+          // reset) by ordinary bot/WAF protection on a lot of real sites —
+          // this is what a real browser sends, for pages any visitor could
+          // otherwise load fine.
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
         },
       },
       (res) => {
