@@ -1,11 +1,11 @@
 export interface PlayerHandle {
-  /** True once the player can actually act on play/pause/seekTo/etc. — for
-   *  YouTube specifically, the imperative handle object exists (and its
-   *  methods are callable without throwing) well before the iframe's
-   *  postMessage handshake finishes, but those calls are silent no-ops
-   *  until then. Sync logic that needs to know a call actually took effect
-   *  (rather than just not crashing) checks this instead of only whether
-   *  the ref itself is attached. */
+  /** True once the player can actually act on play/pause/seekTo/etc. Every
+   *  adapter (plain <video>, and the YouTube/Vimeo custom elements, which
+   *  both extend HTMLVideoElement) handles calls made before load the same
+   *  safe way a native <video> tag does, so this is really just "is the ref
+   *  attached" — kept as its own method so sync logic doesn't need to know
+   *  that detail, and so it stays a real check again if a future adapter
+   *  ever needs one. */
   isReady(): boolean;
   play(): void;
   pause(): void;
@@ -13,17 +13,13 @@ export interface PlayerHandle {
   getCurrentTime(): number;
   getDuration(): number;
   isPaused(): boolean;
-  /** 0–1, normalized the same way for both the HTML5 video element and the YouTube adapter. */
+  /** 0–1, normalized the same way across every adapter. */
   getVolume(): number;
   setVolume(volume: number): void;
-  /** Native "play over everything" mode — only implemented for direct video files (not YouTube). */
+  /** Native "play over everything" mode — only implemented for direct video files (not YouTube/Vimeo). */
   requestPictureInPicture?(): void;
   getPlaybackRate(): number;
   setPlaybackRate(rate: number): void;
-  /** Quality selection — only implemented for YouTube (direct files just play whatever the URL points to). */
-  getQualities?(): string[];
-  getQuality?(): string;
-  setQuality?(quality: string): void;
 }
 
 export interface PlayerAdapterEvents {

@@ -18,15 +18,21 @@ export interface SyncedPlayback {
 
 /** Beyond this much drift, a rate nudge would take too long to catch up — hard-seek instead. */
 const SOFT_CORRECTION_MAX_SECONDS = 5;
-/** +/-6% — imperceptible in pitch/audio, closes a few seconds of drift within a few seconds. */
-const SOFT_CORRECTION_RATE_DELTA = 0.06;
+/** +/-10% — still an imperceptible speed change (browsers pitch-correct
+ *  audio automatically), closes a second of drift in ~10s instead of ~17s.
+ *  Tightened alongside DRIFT_TOLERANCE_SECONDS so a correction that does
+ *  start actually catches up quickly instead of visibly trailing behind. */
+const SOFT_CORRECTION_RATE_DELTA = 0.1;
 const SOFT_CORRECTION_SETTLE_SECONDS = 0.3;
 const SOFT_CORRECTION_CHECK_MS = 400;
 /** How often to re-check drift against the last known state even with no
  *  new event — a stall (buffering, the tab freezing for a moment) otherwise
  *  only gets corrected whenever some unrelated action happens to trigger a
- *  fresh playback:sync, which might not be for a long time. */
-const PERIODIC_RECHECK_MS = 4000;
+ *  fresh playback:sync, which might not be for a long time. Halved from 4s:
+ *  the whole point of this check is catching drift before it's noticeable,
+ *  and 4s of unchecked drift on a device that's decoding slowly is exactly
+ *  the kind of gap users were seeing between two phones side by side. */
+const PERIODIC_RECHECK_MS = 2000;
 /** A freshly-mounted YouTube/Vimeo player can take far longer than one
  *  frame to become controllable (loading the iframe API, the postMessage
  *  handshake) — retry applying the room's current state at this interval

@@ -7,18 +7,6 @@ function formatSpeed(rate: number): string {
   return `${rate}×`;
 }
 
-const QUALITY_LABELS: Record<string, string> = {
-  hd2160: "4K",
-  hd1440: "1440p",
-  hd1080: "1080p",
-  hd720: "720p",
-  large: "480p",
-  medium: "360p",
-  small: "240p",
-  tiny: "144p",
-  auto: "Авто",
-};
-
 const AUTO_HIDE_MS = 2500;
 const DOUBLE_TAP_MS = 300;
 const DOUBLE_TAP_MAX_DIST_PX = 40;
@@ -138,7 +126,6 @@ export function VideoControlsOverlay({
   const [dragValue, setDragValue] = useState<number | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [speedIndex, setSpeedIndex] = useState(PLAYBACK_SPEEDS.indexOf(1));
-  const [qualityLabel, setQualityLabel] = useState<string | null>(null);
   // Optimistic override for the play/pause icon: usePlayerProgress only
   // samples the player every 250ms, so without this, tapping play/pause
   // felt like it had a delay before the button visually caught up — even
@@ -311,17 +298,6 @@ export function VideoControlsOverlay({
     showControls();
   }, [speedIndex, playerRef, showControls]);
 
-  const cycleQuality = useCallback(() => {
-    const player = playerRef.current;
-    const qualities = player?.getQualities?.() ?? [];
-    if (qualities.length === 0) return;
-    const current = player?.getQuality?.() ?? qualities[0];
-    const nextIndex = (qualities.indexOf(current) + 1) % qualities.length;
-    player?.setQuality?.(qualities[nextIndex]);
-    setQualityLabel(QUALITY_LABELS[qualities[nextIndex]] ?? qualities[nextIndex]);
-    showControls();
-  }, [playerRef, showControls]);
-
   const toggleMute = useCallback(() => {
     const player = playerRef.current;
     if (!player) return;
@@ -338,8 +314,6 @@ export function VideoControlsOverlay({
 
   const displayedTime = dragValue ?? progress.currentTime;
   const pipSupported = typeof playerRef.current?.requestPictureInPicture === "function";
-  const availableQualities = playerRef.current?.getQualities?.() ?? [];
-  const qualitySupported = availableQualities.length > 1;
 
   return (
     <div
@@ -421,16 +395,6 @@ export function VideoControlsOverlay({
             >
               {formatSpeed(PLAYBACK_SPEEDS[speedIndex])}
             </button>
-            {qualitySupported && (
-              <button
-                type="button"
-                className={`${styles.iconButton} ${styles.speedButton}`}
-                onClick={cycleQuality}
-                aria-label="Качество видео"
-              >
-                {qualityLabel ?? QUALITY_LABELS[playerRef.current?.getQuality?.() ?? "auto"] ?? "Авто"}
-              </button>
-            )}
             <span className={styles.actionSpacer} />
             {pipSupported && (
               <button type="button" className={styles.iconButton} onClick={handlePipClick} aria-label="Картинка в картинке">

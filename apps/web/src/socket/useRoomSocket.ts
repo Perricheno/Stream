@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { miniApp } from "@telegram-apps/sdk-react";
 import {
   CHAT_HISTORY_LIMIT,
   type ChatMessage,
@@ -10,6 +11,11 @@ import {
 import { socket } from "./socketClient";
 
 export type RoomConnectionStatus = "idle" | "connecting" | "joined" | "error" | "kicked";
+
+/** How long to wait for a reply to the liveness probe on resume (see
+ *  onVisibilityChange below) before assuming the connection is a zombie and
+ *  forcing a hard reconnect. */
+const VISIBILITY_LIVENESS_TIMEOUT_MS = 3000;
 
 export interface RoomSocketState {
   status: RoomConnectionStatus;
@@ -115,11 +121,45 @@ export function useRoomSocket(roomId: string | undefined): RoomSocketState {
     // by the time the user returns the client may have already given up
     // reconnecting on its own. Forcing a fresh `connect()` on resume is a
     // no-op if already connected, but restarts the attempt if not.
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible" && !socket.connected) {
+    //
+    // `socket.connected` on its own isn't trustworthy here: a phone's OS can
+    // suspend the network stack while backgrounded without the client
+    // noticing right away, leaving a "zombie" connection that still reports
+    // connected but is actually dead until socket.io's own heartbeat times
+    // out (tens of seconds — see apps/server/src/index.ts's ping settings).
+    // During that window nothing the user does actually reaches the server,
+    // which looked exactly like "video won't play, buttons don't work" but
+    // was really "the room state you're computing from is stale and the
+    // server never got the memo". Probing with a round trip and forcing a
+    // hard reconnect if it doesn't answer promptly catches this immediately
+    // on resume instead of waiting out that timeout passively.
+    const checkConnectionLiveness = () => {
+      if (!socket.connected) {
         socket.connect();
+        return;
       }
+      let answered = false;
+      socket.emit("time:sync", { clientSentAt: Date.now() }, () => {
+        answered = true;
+      });
+      setTimeout(() => {
+        if (!answered) {
+          socket.disconnect();
+          socket.connect();
+        }
+      }, VISIBILITY_LIVENESS_TIMEOUT_MS);
     };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") checkConnectionLiveness();
+    };
+    // Belt and suspenders alongside the browser's own Page Visibility API:
+    // Telegram's isActive is the client's own purpose-built signal for "the
+    // Mini App just came back to the foreground" and can fire in cases
+    // where the generic visibilitychange event doesn't quite line up with a
+    // specific Telegram client's actual minimize/restore behavior.
+    const offMiniAppActive = miniApp.isActive.sub((isActive) => {
+      if (isActive) checkConnectionLiveness();
+    });
 
     socket.on("connect", join);
     socket.on("room:state", onRoomState);
@@ -151,6 +191,7 @@ export function useRoomSocket(roomId: string | undefined): RoomSocketState {
       socket.off("connect_error", onConnectError);
       socket.io.off("reconnect_failed", onReconnectFailed);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      offMiniAppActive();
       if (joinedRoomRef.current) {
         socket.emit("room:leave");
         joinedRoomRef.current = null;

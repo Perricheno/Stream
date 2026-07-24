@@ -13,6 +13,14 @@ const httpServer = createServer(app);
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>(httpServer, {
   cors: { origin: env.corsOrigin },
+  // Defaults (25s interval / 20s timeout) mean a connection that silently
+  // died — a phone's OS suspending the network stack while the app is
+  // backgrounded is the common case here — can take up to ~45s to be
+  // noticed by either side. During that window the client still believes
+  // it's connected, so nothing re-syncs and nothing the user does actually
+  // reaches the server. Tighter values catch it in ~18s instead.
+  pingInterval: 10_000,
+  pingTimeout: 8_000,
 });
 
 registerAuthMiddleware(io);
