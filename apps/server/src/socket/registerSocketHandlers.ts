@@ -28,10 +28,22 @@ import type { SocketData } from "./types";
 type StreamServer = Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
 
 /**
- * Host-authoritative, last-write-wins playback sync: whoever's play/pause/seek
- * reaches the server first wins, the server stamps it with its own clock, and
- * broadcasts to everyone else — see packages/shared/src/sync.ts for the
- * client-side drift-correction this pairs with.
+ * Host-authoritative playback sync: the room's `playback` (position + isPlaying
+ * + the server's own timestamp) is the one shared truth, and only the current
+ * host can move it — everyone else's client continuously computes where
+ * playback SHOULD be from that snapshot (see computeExpectedPosition in
+ * packages/shared/src/sync.ts) rather than waiting on a peer's relayed
+ * action, so a viewer's own local hiccup (buffering, the app being
+ * backgrounded, a dying connection) can't touch the shared state at all.
+ *
+ * This used to accept play/pause/seek from ANY participant, not just the
+ * host, despite the doc comment already claiming host-authority — a single
+ * viewer's own player stalling or pausing itself while backgrounding/
+ * disconnecting got relayed as if it were an authoritative action, pausing
+ * the room for everyone else too. `getRoom`'s host is always someone
+ * currently connected (removeMember promotes the next member the instant
+ * the host disconnects), so playback keeps moving without needing anyone
+ * still present to actively be "driving" it.
  */
 export function registerSocketHandlers(io: StreamServer): void {
   io.on("connection", (socket) => {
@@ -40,7 +52,7 @@ export function registerSocketHandlers(io: StreamServer): void {
     function applyPlayback(isPlaying: boolean | undefined, payload: PlaybackActionPayload) {
       if (!currentRoomId) return;
       const room = getRoom(currentRoomId);
-      if (!room) return;
+      if (!room || room.hostSocketId !== socket.id) return;
 
       room.playback = {
         isPlaying: isPlaying ?? room.playback.isPlaying,
@@ -174,6 +186,8 @@ export function registerSocketHandlers(io: StreamServer): void {
       io.sockets.sockets.get(target.socketId)?.leave(currentRoomId);
       io.to(currentRoomId).emit("room:participants", toParticipants(room));
     });
+
+    socket.on("time:sync", (_payload, cb) => cb({ serverTime: Date.now() }));
 
     socket.on("disconnect", leaveCurrentRoom);
   });

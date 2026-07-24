@@ -15,5 +15,11 @@ export const socket: RoomSocket = io(SERVER_URL, {
   // Prefer the SDK's parsed initData; fall back to reading the URL hash
   // ourselves if the SDK's stricter parser rejected otherwise-valid data.
   auth: (cb) => cb({ initData: initData.raw() || getRawInitData() || "" }),
-  reconnectionAttempts: 3,
+  // A phone's connection drops constantly (cell handoff, wifi switching,
+  // the network just being bad for a few seconds) — giving up after only 3
+  // tries turned an ordinary blip into "reconnect this manually" for the
+  // user. socket.io's own backoff already caps the delay between attempts
+  // (reconnectionDelayMax, 5s by default), so retrying indefinitely doesn't
+  // mean hammering the server.
+  reconnectionAttempts: Infinity,
 });

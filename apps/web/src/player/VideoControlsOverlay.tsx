@@ -89,14 +89,6 @@ function VolumeOffIcon() {
   );
 }
 
-function ChatIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H8l-4.7 3.53A.5.5 0 0 1 2.5 20V5a1 1 0 0 1 1-1z" />
-    </svg>
-  );
-}
-
 function SkipBackIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -120,15 +112,19 @@ function SkipForwardIcon() {
 }
 
 const SEEK_SKIP_SECONDS = 10;
-const VOLUME_SYNC_MS = 1000;
 
 interface VideoControlsOverlayProps {
   playerRef: React.RefObject<PlayerHandle>;
   progress: PlayerProgress;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
-  onOpenChat: () => void;
-  unreadCount: number;
+  /** Only the host's play/pause/seek/skip reach the server (see
+   *  registerSocketHandlers.ts) — everyone else gets those controls dimmed
+   *  and inert instead of a tap that visually "works" locally but never
+   *  actually moves the shared state, and would otherwise leave their own
+   *  player paused/seeked out of step with everyone else's until the next
+   *  unrelated correction happened to arrive. */
+  isHost: boolean;
 }
 
 export function VideoControlsOverlay({
@@ -136,8 +132,7 @@ export function VideoControlsOverlay({
   progress,
   isFullscreen,
   onToggleFullscreen,
-  onOpenChat,
-  unreadCount,
+  isHost,
 }: VideoControlsOverlayProps) {
   const [visible, setVisible] = useState(true);
   const [dragValue, setDragValue] = useState<number | null>(null);
@@ -164,27 +159,6 @@ export function VideoControlsOverlay({
       setOptimisticPlaying(null);
     }
   }, [progress.isPlaying, optimisticPlaying]);
-
-  // Volume/mute state only ever got SET by our own actions (the mute button,
-  // the swipe gesture) — nothing ever read it back from the player, so if the
-  // player's actual volume changed for a reason we didn't drive (a browser
-  // autoplay policy silently force-muting playback is the big one — YouTube
-  // in particular can start a programmatically-triggered play() muted
-  // without ever telling this component), the button kept showing "sound is
-  // on" while the video played silently. Polling corrects that drift instead
-  // of only ever writing one way.
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (gestureRef.current?.isDragging) return;
-      const player = playerRef.current;
-      if (!player) return;
-      const actualVolume = player.getVolume();
-      setIsMuted(actualVolume <= 0);
-      setVolumeLevel((prev) => (Math.abs(prev - actualVolume) > 0.01 ? actualVolume : prev));
-      if (actualVolume > 0) lastVolumeRef.current = actualVolume;
-    }, VOLUME_SYNC_MS);
-    return () => clearInterval(interval);
-  }, [playerRef]);
 
   const scheduleHide = useCallback(() => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -289,6 +263,10 @@ export function VideoControlsOverlay({
   }, []);
 
   const togglePlayPause = useCallback(() => {
+    if (!isHost) {
+      showControls();
+      return;
+    }
     const player = playerRef.current;
     if (!player) return;
     if (player.isPaused()) {
@@ -299,17 +277,21 @@ export function VideoControlsOverlay({
       setOptimisticPlaying(false);
     }
     showControls();
-  }, [playerRef, showControls]);
+  }, [isHost, playerRef, showControls]);
 
   const skip = useCallback(
     (deltaSeconds: number) => {
+      if (!isHost) {
+        showControls();
+        return;
+      }
       const player = playerRef.current;
       if (!player) return;
       const target = Math.min(Math.max(player.getCurrentTime() + deltaSeconds, 0), progress.duration || Infinity);
       player.seekTo(target);
       showControls();
     },
-    [playerRef, progress.duration, showControls],
+    [isHost, playerRef, progress.duration, showControls],
   );
 
   const handleFullscreenClick = useCallback(() => {
@@ -375,19 +357,17 @@ export function VideoControlsOverlay({
         </div>
       </div>
       <div className={styles.controlsGroup} data-visible={visible}>
-        <button type="button" className={styles.chatButton} onClick={onOpenChat} aria-label="Чат">
-          <ChatIcon />
-          {unreadCount > 0 && (
-            <span className={styles.chatBadge} style={{ animation: "popIn 0.2s ease" }}>
-              {unreadCount > 9 ? "9+" : unreadCount}
-            </span>
-          )}
-        </button>
-        <div className={styles.centerControls}>
-          <button type="button" className={styles.skipButton} onClick={() => skip(-SEEK_SKIP_SECONDS)} aria-label="Назад на 10 секунд">
+        <div className={styles.centerControls} data-host={isHost}>
+          <button
+            type="button"
+            className={styles.skipButton}
+            onClick={() => skip(-SEEK_SKIP_SECONDS)}
+            aria-label="Назад на 10 секунд"
+            disabled={!isHost}
+          >
             <SkipBackIcon />
           </button>
-          <button type="button" className={styles.playButton} onClick={togglePlayPause} aria-label="Play/Pause">
+          <button type="button" className={styles.playButton} onClick={togglePlayPause} aria-label="Play/Pause" disabled={!isHost}>
             {isPlaying ? <PauseIcon /> : <PlayIcon />}
           </button>
           <button
@@ -395,12 +375,13 @@ export function VideoControlsOverlay({
             className={styles.skipButton}
             onClick={() => skip(SEEK_SKIP_SECONDS)}
             aria-label="Вперёд на 10 секунд"
+            disabled={!isHost}
           >
             <SkipForwardIcon />
           </button>
         </div>
         <div className={styles.bottomBar}>
-          <div className={styles.seekRow}>
+          <div className={styles.seekRow} data-host={isHost}>
             <span className={styles.time}>{formatTime(displayedTime)}</span>
             <input
               type="range"
@@ -409,8 +390,12 @@ export function VideoControlsOverlay({
               max={progress.duration || 0}
               step={0.5}
               value={displayedTime}
-              onChange={(event) => setDragValue(Number(event.target.value))}
+              disabled={!isHost}
+              onChange={(event) => {
+                if (isHost) setDragValue(Number(event.target.value));
+              }}
               onPointerUp={(event) => {
+                if (!isHost) return;
                 const value = Number((event.target as HTMLInputElement).value);
                 playerRef.current?.seekTo(value);
                 setDragValue(null);

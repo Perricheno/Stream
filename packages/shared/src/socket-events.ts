@@ -34,6 +34,14 @@ export interface ClientToServerEvents {
   "queue:remove": (payload: { itemId: string }) => void;
   /** Host-only; pops the front of the queue into `source`. No-ops if the queue is empty. */
   "queue:advance": () => void;
+  /** Stateless clock-offset probe (Cristian's algorithm) — the server just
+   *  echoes back its own current time, no room/auth context needed. Sent
+   *  repeatedly from a fresh connection and periodically afterward so each
+   *  client can compute how far its own clock is from the server's, since
+   *  `playback:sync`'s `updatedAtServerTime` is only meaningful if compared
+   *  against an equivalently-scaled clock rather than the client's own
+   *  (possibly skewed) one. */
+  "time:sync": (payload: { clientSentAt: number }, cb: (res: { serverTime: number }) => void) => void;
 }
 
 export interface ServerToClientEvents {

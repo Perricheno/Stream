@@ -32,24 +32,93 @@
   flex-shrink: 0;
 }
 
-.videoArea {
-  /* Chat is no longer permanently docked below the video (see ChatDrawer),
-     so this now owns the rest of the screen instead of a thin strip above a
-     chat feed. Plain top-aligned + scrollable by default — the source
-     picker's content (forms, search results) can be taller than the
-     available space and must scroll, not center-and-clip. */
+.body {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.videoArea {
+  /* Deliberately thin top gap and no flex-grow — video should sit right
+     under the toolbar row (YouTube-app-like), not float mid-screen or get
+     centered in whatever space chat isn't using. Chat (.chatFill below)
+     takes all the leftover room instead. */
+  flex-shrink: 0;
   padding: 4px 16px 12px;
 }
 
-.videoAreaCentered {
-  /* Applied only while an actual video is showing (see RoomScreen.tsx) —
-     its aspect-ratio box is reliably shorter than the available space, so
-     centering it here (rather than leaving it flush under the toolbar) is
-     safe, unlike the source picker's variable-height content above. */
+.chatFill {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Landscape: side-by-side instead of stacked, like most watch-together apps
+   handle rotation — the video keeps most of the width and stays fully
+   visible, chat becomes a narrower column instead of disappearing off the
+   bottom of a much shorter viewport. */
+@media (orientation: landscape) {
+  .body {
+    flex-direction: row;
+  }
+
+  .videoArea {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    padding: 8px 0 8px 12px;
+  }
+
+  .chatFill {
+    flex: 0 0 300px;
+    max-width: 40vw;
+    padding: 8px 12px 8px 0;
+  }
+}
+
+/* Our own CSS "fullscreen" (see VideoPlayer.module.css) fills the entire
+   viewport on top of everything, including where the layout above would
+   have put the chat column — so it gets its own on-demand slide-in panel
+   instead (toggled from a floating button), rather than a permanently
+   docked column stealing space from an intentionally immersive view. */
+.chatToggle {
+  position: fixed;
+  top: calc(var(--tg-viewport-safe-area-inset-top, 0px) + var(--tg-viewport-content-safe-area-inset-top, 0px) + 12px);
+  right: 12px;
+  z-index: 1001;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+}
+
+.chatOverlay {
+  /* Applied onto ChatPanel's own root alongside its .panel class (same
+     element, see ChatPanel.tsx's className prop), which already provides
+     the flex column layout — this just repositions that same element as a
+     fixed right-edge sheet instead of normal in-flow content. */
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: 1001;
+  width: 320px;
+  max-width: 82vw;
+  background: var(--tg-theme-bg-color, #17212b);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.35);
+  animation: slideInFromRight 0.2s ease;
+}
+
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }

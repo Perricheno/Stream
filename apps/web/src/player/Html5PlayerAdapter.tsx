@@ -10,12 +10,15 @@ interface Html5PlayerAdapterProps extends PlayerAdapterEvents {
 }
 
 export const Html5PlayerAdapter = forwardRef<PlayerHandle, Html5PlayerAdapterProps>(
-  function Html5PlayerAdapter({ source, suppressed, onPlay, onPause, onSeek, onEnded }, ref) {
+  function Html5PlayerAdapter({ source, suppressed, onPlay, onPause, onSeek, onEnded, onBuffering }, ref) {
     const videoRef = useRef<HTMLVideoElement>(null);
 
     useImperativeHandle(
       ref,
       () => ({
+        // A <video> element's methods are always immediately callable, no
+        // handshake to wait for — ready the instant it's mounted.
+        isReady: () => videoRef.current !== null,
         play: () => void videoRef.current?.play(),
         pause: () => videoRef.current?.pause(),
         seekTo: (seconds) => {
@@ -71,18 +74,27 @@ export const Html5PlayerAdapter = forwardRef<PlayerHandle, Html5PlayerAdapterPro
         if (!suppressed.current) onSeek(video.currentTime);
       };
       const handleEnded = () => onEnded();
+      // "waiting"/"playing" is the spec pair for stall start/end — "playing"
+      // fires whenever playback (re)starts, including right after a wait,
+      // unlike "canplay" which can fire without actually resuming.
+      const handleWaiting = () => onBuffering(true);
+      const handlePlaying = () => onBuffering(false);
 
       video.addEventListener("play", handlePlay);
       video.addEventListener("pause", handlePause);
       video.addEventListener("seeked", handleSeeked);
       video.addEventListener("ended", handleEnded);
+      video.addEventListener("waiting", handleWaiting);
+      video.addEventListener("playing", handlePlaying);
       return () => {
         video.removeEventListener("play", handlePlay);
         video.removeEventListener("pause", handlePause);
         video.removeEventListener("seeked", handleSeeked);
         video.removeEventListener("ended", handleEnded);
+        video.removeEventListener("waiting", handleWaiting);
+        video.removeEventListener("playing", handlePlaying);
       };
-    }, [onPlay, onPause, onSeek, onEnded, suppressed]);
+    }, [onPlay, onPause, onSeek, onEnded, onBuffering, suppressed]);
 
     return <video ref={videoRef} playsInline className={styles.fill} />;
   },

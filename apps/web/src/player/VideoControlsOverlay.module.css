@@ -62,6 +62,18 @@
   align-items: center;
   gap: 28px;
 }
+/* Only the host's play/pause/seek/skip reach the server — everyone else's
+   would look like it worked (an optimistic local play/pause) then get no
+   correction back until some unrelated sync event happened to arrive.
+   Dimming these for non-hosts sets the right expectation up front instead
+   of a control that quietly does nothing. */
+.centerControls[data-host="false"] {
+  opacity: 0.4;
+}
+
+.seekRow[data-host="false"] {
+  opacity: 0.5;
+}
 
 .playButton {
   width: 60px;
@@ -91,39 +103,6 @@
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   flex-shrink: 0;
-}
-
-.chatButton {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(0, 0, 0, 0.45);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.chatBadge {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 3px;
-  border-radius: 8px;
-  background: var(--tg-theme-destructive-text-color, #ec3942);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 16px;
-  text-align: center;
 }
 
 .bottomBar {

@@ -24,10 +24,18 @@ import { QueuePanel } from "./QueuePanel";
 import { RoomQrModal } from "./RoomQrModal";
 import { parseVideoUrl } from "./parseVideoUrl";
 import { RoomToolbar } from "./RoomToolbar";
-import { ChatDrawer } from "./ChatDrawer";
+import { ChatPanel } from "./ChatPanel";
 import styles from "./RoomScreen.module.css";
 
 const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME as string | undefined;
+
+function ChatBubbleIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M4 4h16v12H7l-3 3V4z" />
+    </svg>
+  );
+}
 
 interface RoomScreenProps {
   roomId: string;
@@ -46,14 +54,17 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
   const [queueOpen, setQueueOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [participantsOpen, setParticipantsOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const visualViewportHeight = useVisualViewportHeight();
   const [pickingSource, setPickingSource] = useState(false);
   const [hostToast, setHostToast] = useState<string | null>(null);
+  const [isVideoFullscreen, setIsVideoFullscreen] = useState(false);
+  const [chatSidebarOpen, setChatSidebarOpen] = useState(false);
+  const handleFullscreenChange = useCallback((value: boolean) => {
+    setIsVideoFullscreen(value);
+    if (!value) setChatSidebarOpen(false);
+  }, []);
   const autoplayedSourceRef = useRef<string | null>(null);
   const lastParticipantCountRef = useRef<number | null>(null);
-  const lastMessageCountRef = useRef<number | null>(null);
   const lastHostIdRef = useRef<number | null>(null);
   const isHostRef = useRef(false);
   const currentHostId = room?.participants.find((p) => p.isHost)?.userId ?? null;
@@ -79,8 +90,27 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
     const sourceKey = JSON.stringify(room.source);
     if (autoplayedSourceRef.current === sourceKey) return;
     autoplayedSourceRef.current = sourceKey;
-    const timer = setTimeout(() => synced.playerRef.current?.play(), 800);
-    return () => clearTimeout(timer);
+    let cancelled = false;
+    let attempts = 0;
+    // A single fixed-delay attempt silently lost the autoplay if the player
+    // (YouTube/Vimeo especially) took longer than that to finish its
+    // handshake — the one .play() call landed as a no-op and nothing ever
+    // retried it, leaving the video stuck paused at 0:00 with no error.
+    const tryPlay = () => {
+      if (cancelled) return;
+      if (synced.playerRef.current?.isReady()) {
+        synced.playerRef.current.play();
+        return;
+      }
+      attempts += 1;
+      if (attempts >= 50) return; // ~10s
+      setTimeout(tryPlay, 200);
+    };
+    const timer = setTimeout(tryPlay, 800);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [room?.source, profile?.autoplay, synced.playerRef]);
 
   const handleBack = useCallback(async () => {
@@ -120,21 +150,6 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
     if (previous === null || previous === count || profile?.notificationsEnabled === false) return;
     haptics.selectionChanged();
   }, [room?.participants.length, profile?.notificationsEnabled, haptics, room]);
-
-  // Badge the chat toggle with new messages that arrived while the drawer
-  // was closed — chat is no longer permanently docked on screen, so this is
-  // the only signal that something new came in while watching.
-  useEffect(() => {
-    const count = room?.messages.length ?? 0;
-    const previous = lastMessageCountRef.current;
-    lastMessageCountRef.current = count;
-    if (previous === null || chatOpen || count <= previous) return;
-    setUnreadCount((n) => n + (count - previous));
-  }, [room?.messages.length, chatOpen]);
-
-  useEffect(() => {
-    if (chatOpen) setUnreadCount(0);
-  }, [chatOpen]);
 
   const changeSource = useCallback((source: VideoSource) => {
     socket.emit("playback:change-source", { source });
@@ -203,41 +218,53 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
           queueCount={room.queue.length}
           onShowQr={() => (inviteUrl ? setQrOpen(true) : haptics.notify("error"))}
           onLeave={handleBack}
-          onOpenChat={() => setChatOpen(true)}
-          unreadCount={unreadCount}
         />
         <ParticipantsBar participants={room.participants} onOpen={() => setParticipantsOpen(true)} />
       </div>
 
-      <div className={`${styles.videoArea} ${room.source && !pickingSource ? styles.videoAreaCentered : ""}`}>
-        {room.source && !pickingSource ? (
-          <div key={JSON.stringify(room.source)} style={{ animation: "fadeIn 0.25s ease" }}>
-            <VideoPlayer
-              source={room.source}
-              playerRef={synced.playerRef}
-              suppressed={synced.suppressed}
-              onPlay={synced.onPlay}
-              onPause={synced.onPause}
-              onSeek={synced.onSeek}
-              onEnded={handleEnded}
-              onOpenChat={() => setChatOpen(true)}
-              unreadCount={unreadCount}
-            />
-          </div>
-        ) : (
-          <div key="picker" style={{ animation: "fadeIn 0.2s ease" }}>
-            <VideoSourcePicker onSelect={changeSource} />
-          </div>
-        )}
+      <div className={styles.body}>
+        <div className={styles.videoArea}>
+          {room.source && !pickingSource ? (
+            <div key={JSON.stringify(room.source)} style={{ animation: "fadeIn 0.25s ease" }}>
+              <VideoPlayer
+                source={room.source}
+                playerRef={synced.playerRef}
+                suppressed={synced.suppressed}
+                onPlay={synced.onPlay}
+                onPause={synced.onPause}
+                onSeek={synced.onSeek}
+                onEnded={handleEnded}
+                onBuffering={synced.onBuffering}
+                isHost={isHost}
+                onFullscreenChange={handleFullscreenChange}
+              />
+            </div>
+          ) : (
+            <div key="picker" style={{ animation: "fadeIn 0.2s ease" }}>
+              <VideoSourcePicker onSelect={changeSource} />
+            </div>
+          )}
+        </div>
+
+        <ChatPanel className={styles.chatFill} messages={room.messages} currentUserId={telegramUser?.id} onSend={sendChat} />
       </div>
 
-      <ChatDrawer
-        open={chatOpen}
-        onOpenChange={setChatOpen}
-        messages={room.messages}
-        currentUserId={telegramUser?.id}
-        onSend={sendChat}
-      />
+      {/* Our own fullscreen mode covers the whole viewport (including where
+          the docked/landscape chat column would be), so chat becomes an
+          on-demand slide-in panel reachable via a floating toggle instead. */}
+      {isVideoFullscreen && (
+        <button
+          type="button"
+          className={styles.chatToggle}
+          onClick={() => setChatSidebarOpen((prev) => !prev)}
+          aria-label={chatSidebarOpen ? "Скрыть чат" : "Показать чат"}
+        >
+          <ChatBubbleIcon />
+        </button>
+      )}
+      {isVideoFullscreen && chatSidebarOpen && (
+        <ChatPanel className={styles.chatOverlay} messages={room.messages} currentUserId={telegramUser?.id} onSend={sendChat} />
+      )}
 
       <ParticipantsModal
         open={participantsOpen}

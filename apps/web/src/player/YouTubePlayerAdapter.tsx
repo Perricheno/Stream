@@ -11,7 +11,7 @@ interface YouTubePlayerAdapterProps extends PlayerAdapterEvents {
 let instanceCounter = 0;
 
 export const YouTubePlayerAdapter = forwardRef<PlayerHandle, YouTubePlayerAdapterProps>(
-  function YouTubePlayerAdapter({ videoId, suppressed, onPlay, onPause, onSeek, onEnded }, ref) {
+  function YouTubePlayerAdapter({ videoId, suppressed, onPlay, onPause, onSeek, onEnded, onBuffering }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const playerRef = useRef<YT.Player | null>(null);
     const elementId = useRef(`yt-player-${++instanceCounter}`);
@@ -26,6 +26,7 @@ export const YouTubePlayerAdapter = forwardRef<PlayerHandle, YouTubePlayerAdapte
     useImperativeHandle(
       ref,
       () => ({
+        isReady: () => isReadyRef.current,
         play: () => {
           if (isReadyRef.current) playerRef.current?.playVideo();
         },
@@ -88,8 +89,14 @@ export const YouTubePlayerAdapter = forwardRef<PlayerHandle, YouTubePlayerAdapte
               isReadyRef.current = true;
             },
             onStateChange: (event) => {
-              const atSeconds = event.target.getCurrentTime();
+              // Reported regardless of `suppressed` — a stall is real player
+              // state the sync layer needs to know about even when it was
+              // our own programmatic seek that triggered it.
+              if (event.data === YT.PlayerState.BUFFERING) onBuffering(true);
+              else if (event.data === YT.PlayerState.PLAYING) onBuffering(false);
+
               if (suppressed.current) return;
+              const atSeconds = event.target.getCurrentTime();
               if (event.data === YT.PlayerState.PLAYING) onPlay(atSeconds);
               else if (event.data === YT.PlayerState.PAUSED) onPause(atSeconds);
               else if (event.data === YT.PlayerState.ENDED) onEnded();
