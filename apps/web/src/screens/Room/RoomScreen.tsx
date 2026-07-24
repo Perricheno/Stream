@@ -4,6 +4,7 @@ import { shareURL } from "@telegram-apps/sdk-react";
 import type { ChatReplyPreview, VideoSource } from "@stream/shared";
 import { useBackButton } from "../../telegram/useBackButton";
 import { useClosingConfirmation } from "../../telegram/useClosingConfirmation";
+import { useDisableVerticalSwipes } from "../../telegram/useDisableVerticalSwipes";
 import { useVisualViewportHeight } from "../../telegram/useVisualViewportHeight";
 import { useHapticFeedback } from "../../telegram/useHapticFeedback";
 import { useProfile } from "../../telegram/ProfileContext";
@@ -143,6 +144,9 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
   // Covers closing via Telegram's own X/swipe-down — handleBack above only
   // intercepts in-app navigation (our custom back button), not that.
   useClosingConfirmation(true);
+  // The video controls' own vertical swipe (volume) would otherwise compete
+  // with Telegram's native swipe-to-minimize for the same gesture.
+  useDisableVerticalSwipes(true);
 
   const inviteUrl = BOT_USERNAME ? `https://t.me/${BOT_USERNAME}?startapp=room_${roomId}` : null;
 

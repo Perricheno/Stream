@@ -5,6 +5,7 @@ import {
   isTMA,
   miniApp,
   requestFullscreen,
+  swipeBehavior,
   themeParams,
   viewport,
 } from "@telegram-apps/sdk-react";
@@ -139,6 +140,13 @@ export function bootstrapTelegram(): void {
   if (themeParams.bindCssVars.isAvailable()) themeParams.bindCssVars();
   if (backButton.mount.isAvailable()) backButton.mount();
   if (closingBehavior.mount.isAvailable()) closingBehavior.mount();
+  // Mounted globally, toggled per-screen (see useDisableVerticalSwipes) — the
+  // Room screen's video overlay has its own vertical swipe-for-volume
+  // gesture, which Telegram's native swipe-to-minimize would otherwise fight
+  // over the same gesture. CSS touch-action can't reach that native gesture
+  // recognizer (it lives in the host app, above the WebView's own DOM/CSS),
+  // so this SDK call is the only way to actually suppress it.
+  if (swipeBehavior.mount.isAvailable()) swipeBehavior.mount();
 
   if (viewport.mount.isAvailable() && !viewport.isMounting()) {
     viewport

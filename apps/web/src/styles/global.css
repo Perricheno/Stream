@@ -95,6 +95,18 @@ body[data-theme="light"] {
   box-sizing: border-box;
 }
 
+/* Telegram's Android client appends the device's performance class (LOW/
+   AVERAGE/HIGH) to the User-Agent — see detectPerformanceClass.ts, which
+   stamps this attribute on <html> at startup. Telegram's own Mini App design
+   guidelines explicitly recommend cutting animations on low-end hardware;
+   done here as one blanket override instead of touching every component
+   that sets an inline `animation`/`transition` style. */
+html[data-reduced-motion="true"] * {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0s !important;
+  transition-duration: 0.001ms !important;
+}
+
 html,
 body,
 #root {
