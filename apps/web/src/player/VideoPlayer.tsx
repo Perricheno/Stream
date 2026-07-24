@@ -24,6 +24,10 @@ interface VideoPlayerProps extends PlayerAdapterEvents {
    *  chat-sidebar toggle over it — there's no room left for the normally
    *  docked-under-video chat once the video covers the whole screen. */
   onFullscreenChange?: (isFullscreen: boolean) => void;
+  /** True while the fullscreen chat side panel is open — shrinks and shifts
+   *  the video to make room for it instead of the panel simply floating on
+   *  top, so the video stays fully visible instead of partly covered. */
+  shrinkForChat?: boolean;
 }
 
 /** Single entry point the app renders — picks the right adapter, and owns the
@@ -39,6 +43,7 @@ export function VideoPlayer({
   onBuffering,
   isHost,
   onFullscreenChange,
+  shrinkForChat,
 }: VideoPlayerProps) {
   const { t } = useTranslation();
   const progress = usePlayerProgress(playerRef);
@@ -57,7 +62,10 @@ export function VideoPlayer({
   const toggleFullscreen = () => setIsFullscreen((prev) => !prev);
 
   return (
-    <div className={`${styles.container} ${isFullscreen ? styles.fullscreen : ""}`}>
+    <div
+      className={`${styles.container} ${isFullscreen ? styles.fullscreen : ""}`}
+      data-chat-open={isFullscreen && shrinkForChat ? "true" : undefined}
+    >
       {source.type === "youtube" ? (
         <YouTubePlayerAdapter ref={playerRef} videoId={source.videoId} suppressed={suppressed} {...events} />
       ) : source.type === "vimeo" ? (

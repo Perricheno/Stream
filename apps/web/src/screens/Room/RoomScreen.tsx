@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Placeholder, Snackbar } from "@telegram-apps/telegram-ui";
 import { shareURL } from "@telegram-apps/sdk-react";
-import type { VideoSource } from "@stream/shared";
+import type { ChatReplyPreview, VideoSource } from "@stream/shared";
 import { useBackButton } from "../../telegram/useBackButton";
 import { useClosingConfirmation } from "../../telegram/useClosingConfirmation";
 import { useVisualViewportHeight } from "../../telegram/useVisualViewportHeight";
@@ -13,6 +13,7 @@ import { useTranslation } from "../../i18n/useTranslation";
 import { useRoomSocket } from "../../socket/useRoomSocket";
 import { socket } from "../../socket/socketClient";
 import { useSyncedPlayback } from "../../player/useSyncedPlayback";
+import { useParticipantSyncHealth } from "../../status/useParticipantSyncHealth";
 import { VideoPlayer } from "../../player/VideoPlayer";
 import { StickerPlayer } from "../../stickers/StickerPlayer";
 import { SettingsPanel } from "../Settings/SettingsPanel";
@@ -49,6 +50,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
   const haptics = useHapticFeedback();
   const telegramUser = useTelegramUser();
   const synced = useSyncedPlayback(socket, room?.playback ?? null);
+  const syncHealth = useParticipantSyncHealth(socket);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
@@ -59,12 +61,14 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
   const [hostToast, setHostToast] = useState<string | null>(null);
   const [isVideoFullscreen, setIsVideoFullscreen] = useState(false);
   const [chatSidebarOpen, setChatSidebarOpen] = useState(false);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
   const handleFullscreenChange = useCallback((value: boolean) => {
     setIsVideoFullscreen(value);
     if (!value) setChatSidebarOpen(false);
   }, []);
   const autoplayedSourceRef = useRef<string | null>(null);
   const lastParticipantCountRef = useRef<number | null>(null);
+  const lastMessageCountRef = useRef<number | null>(null);
   const lastHostIdRef = useRef<number | null>(null);
   const isHostRef = useRef(false);
   const currentHostId = room?.participants.find((p) => p.isHost)?.userId ?? null;
@@ -113,6 +117,22 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
     };
   }, [room?.source, profile?.autoplay, synced.playerRef]);
 
+  // Chat is always visible docked under the video normally, so there's
+  // nothing to badge — but the fullscreen slide-in panel (see below) can be
+  // closed while messages keep arriving, and that's the one case where a
+  // "something new happened" signal is actually needed.
+  useEffect(() => {
+    const count = room?.messages.length ?? 0;
+    const previous = lastMessageCountRef.current;
+    lastMessageCountRef.current = count;
+    if (previous === null || count <= previous) return;
+    if (isVideoFullscreen && !chatSidebarOpen) setChatUnreadCount((n) => n + (count - previous));
+  }, [room?.messages.length, isVideoFullscreen, chatSidebarOpen]);
+
+  useEffect(() => {
+    if (chatSidebarOpen) setChatUnreadCount(0);
+  }, [chatSidebarOpen]);
+
   const handleBack = useCallback(async () => {
     const confirmed = await confirmAction(
       t("leaveRoomDescription"),
@@ -156,8 +176,16 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
     setPickingSource(false);
   }, []);
 
-  const sendChat = useCallback((text: string) => {
-    socket.emit("chat:send", { text });
+  const sendChat = useCallback((text: string, replyTo?: ChatReplyPreview) => {
+    socket.emit("chat:send", { text, replyTo });
+  }, []);
+
+  const editChat = useCallback((id: string, text: string) => {
+    socket.emit("chat:edit", { id, text });
+  }, []);
+
+  const deleteChat = useCallback((id: string) => {
+    socket.emit("chat:delete", { id });
   }, []);
 
   const kickParticipant = useCallback((targetUserId: number) => {
@@ -199,7 +227,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
   if (status === "error" || !room) {
     return (
       <Placeholder header={t("joinErrorTitle")} description={error ?? t("joinErrorRetry")}>
-        <StickerPlayer id="blocked" size={120} />
+        <StickerPlayer id="sad" size={120} />
       </Placeholder>
     );
   }
@@ -237,6 +265,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
                 onBuffering={synced.onBuffering}
                 isHost={isHost}
                 onFullscreenChange={handleFullscreenChange}
+                shrinkForChat={chatSidebarOpen}
               />
             </div>
           ) : (
@@ -246,24 +275,43 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
           )}
         </div>
 
-        <ChatPanel className={styles.chatFill} messages={room.messages} currentUserId={telegramUser?.id} onSend={sendChat} />
+        <ChatPanel
+          className={styles.chatFill}
+          messages={room.messages}
+          currentUserId={telegramUser?.id}
+          onSend={sendChat}
+          onEdit={editChat}
+          onDelete={deleteChat}
+        />
       </div>
 
       {/* Our own fullscreen mode covers the whole viewport (including where
           the docked/landscape chat column would be), so chat becomes an
-          on-demand slide-in panel reachable via a floating toggle instead. */}
-      {isVideoFullscreen && (
+          on-demand slide-in panel reachable via a floating toggle instead.
+          The toggle only exists while the panel is CLOSED — once open, the
+          panel's own close button (see ChatPanel's onClose) is the way
+          back, so the two never fight over the same corner of the screen. */}
+      {isVideoFullscreen && !chatSidebarOpen && (
         <button
           type="button"
           className={styles.chatToggle}
-          onClick={() => setChatSidebarOpen((prev) => !prev)}
-          aria-label={chatSidebarOpen ? "Скрыть чат" : "Показать чат"}
+          onClick={() => setChatSidebarOpen(true)}
+          aria-label="Показать чат"
         >
           <ChatBubbleIcon />
+          {chatUnreadCount > 0 && <span className={styles.chatToggleBadge}>{chatUnreadCount > 9 ? "9+" : chatUnreadCount}</span>}
         </button>
       )}
       {isVideoFullscreen && chatSidebarOpen && (
-        <ChatPanel className={styles.chatOverlay} messages={room.messages} currentUserId={telegramUser?.id} onSend={sendChat} />
+        <ChatPanel
+          className={styles.chatOverlay}
+          messages={room.messages}
+          currentUserId={telegramUser?.id}
+          onSend={sendChat}
+          onEdit={editChat}
+          onDelete={deleteChat}
+          onClose={() => setChatSidebarOpen(false)}
+        />
       )}
 
       <ParticipantsModal
@@ -274,6 +322,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
         isHost={isHost}
         onKick={kickParticipant}
         onInvite={() => setFriendsOpen(true)}
+        syncHealth={syncHealth}
       />
       <FriendsPanel open={friendsOpen} onOpenChange={setFriendsOpen} roomId={roomId} />
       <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />

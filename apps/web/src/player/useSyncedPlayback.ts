@@ -162,6 +162,23 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
     return () => clearInterval(interval);
   }, [applyServerState]);
 
+  // Reports this client's own drift/buffering state for the participants
+  // list's sync-health dots — purely informational, doesn't feed back into
+  // the correction logic above at all (see sync:report's doc comment).
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const player = playerRef.current;
+      const state = lastKnownStateRef.current;
+      if (!player?.isReady() || !state) return;
+      const expected = computeExpectedPosition(state, serverNow());
+      socket.emit("sync:report", {
+        driftSeconds: player.getCurrentTime() - expected,
+        isBuffering: isBufferingRef.current,
+      });
+    }, PERIODIC_RECHECK_MS);
+    return () => clearInterval(interval);
+  }, [socket, serverNow]);
+
   const emit = useCallback(
     (type: "play" | "pause" | "seek", atSeconds: number) => {
       // A fresh local action means the user just took over — don't let a

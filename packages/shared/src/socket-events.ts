@@ -1,4 +1,4 @@
-import type { ChatMessage } from "./chat";
+import type { ChatMessage, ChatReplyPreview } from "./chat";
 import type { QueueItem } from "./queue";
 import type { Participant, RoomStatePayload, VideoSource } from "./room";
 import type { PlaybackSyncPayload } from "./sync";
@@ -25,7 +25,11 @@ export interface ClientToServerEvents {
   "playback:pause": (payload: PlaybackActionPayload) => void;
   "playback:seek": (payload: PlaybackActionPayload) => void;
   "playback:change-source": (payload: { source: VideoSource }) => void;
-  "chat:send": (payload: { text: string }) => void;
+  "chat:send": (payload: { text: string; replyTo?: ChatReplyPreview }) => void;
+  /** Only the author's own client may edit/delete — the server ignores
+   *  these from anyone else (see registerSocketHandlers.ts). */
+  "chat:edit": (payload: { id: string; text: string }) => void;
+  "chat:delete": (payload: { id: string }) => void;
   /** Host-only; the server ignores this from anyone else. */
   "room:kick": (payload: { targetUserId: number }) => void;
   /** Anyone in the room can queue up a video. */
@@ -42,6 +46,10 @@ export interface ClientToServerEvents {
    *  against an equivalently-scaled clock rather than the client's own
    *  (possibly skewed) one. */
   "time:sync": (payload: { clientSentAt: number }, cb: (res: { serverTime: number }) => void) => void;
+  /** Purely informational — the server just relays it to the room for the
+   *  participants list's sync-health dots, it never feeds back into the
+   *  actual playback state (that stays server-authoritative, see sync.ts). */
+  "sync:report": (payload: { driftSeconds: number; isBuffering: boolean }) => void;
 }
 
 export interface ServerToClientEvents {
@@ -50,6 +58,9 @@ export interface ServerToClientEvents {
   "playback:sync": (payload: PlaybackSyncPayload) => void;
   "playback:source-changed": (payload: { source: VideoSource }) => void;
   "chat:message": (message: ChatMessage) => void;
+  "chat:message-updated": (message: ChatMessage) => void;
+  "chat:message-deleted": (payload: { id: string }) => void;
+  "sync:status": (payload: { userId: number; driftSeconds: number; isBuffering: boolean; updatedAt: number }) => void;
   "room:error": (payload: { code: string; message: string }) => void;
   /** Sent only to the removed participant. */
   "room:kicked": () => void;

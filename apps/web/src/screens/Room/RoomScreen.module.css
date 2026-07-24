@@ -10,6 +10,14 @@
   inset: 0;
   display: flex;
   flex-direction: column;
+  /* Shared with VideoPlayer.module.css's .fullscreen[data-chat-open] via CSS
+     custom-property inheritance (crosses CSS Modules files fine — it's a
+     DOM cascade, not a stylesheet one) so the video's shrink amount always
+     matches the chat panel's actual rendered width exactly, on any screen
+     size, instead of two hardcoded numbers that could drift apart and
+     leave a gap. Capped well below half the viewport — the panel only
+     needs to be readable, not dominate an already-narrow phone screen. */
+  --chat-panel-width: min(260px, 60vw);
   /* Telegram resizes this CSS var when the on-screen keyboard opens, which
      is exactly what we want here — it keeps the chat input pinned above
      the keyboard instead of hiding behind it. 100dvh is the dev/browser
@@ -99,6 +107,22 @@
   cursor: pointer;
 }
 
+.chatToggleBadge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: var(--tg-theme-destructive-text-color, #ec3942);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
 .chatOverlay {
   /* Applied onto ChatPanel's own root alongside its .panel class (same
      element, see ChatPanel.tsx's className prop), which already provides
@@ -107,8 +131,7 @@
   position: fixed;
   inset: 0 0 0 auto;
   z-index: 1001;
-  width: 320px;
-  max-width: 82vw;
+  width: var(--chat-panel-width);
   background: var(--tg-theme-bg-color, #17212b);
   box-shadow: -4px 0 24px rgba(0, 0, 0, 0.35);
   animation: slideInFromRight 0.2s ease;

@@ -3,6 +3,7 @@ import type { AppLanguage } from "@stream/shared";
 import { useProfile } from "../../telegram/ProfileContext";
 import { useTranslation } from "../../i18n/useTranslation";
 import { ModalBackdrop } from "../../components/ModalBackdrop";
+import { StickerPlayer } from "../../stickers/StickerPlayer";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -34,6 +35,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
             />
           </Cell>
           <Cell
+            before={<StickerPlayer id="incognito" size={32} />}
             after={
               <Switch
                 checked={profile.hideProfile}

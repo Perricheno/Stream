@@ -14,6 +14,8 @@ import {
   addMember,
   addQueueItem,
   advanceQueue,
+  deleteChatMessage,
+  editChatMessage,
   getOrCreateRoom,
   getRoom,
   removeMember,
@@ -119,7 +121,7 @@ export function registerSocketHandlers(io: StreamServer): void {
       io.to(currentRoomId).emit("playback:source-changed", { source });
     });
 
-    socket.on("chat:send", ({ text }) => {
+    socket.on("chat:send", ({ text, replyTo }) => {
       if (!currentRoomId) return;
       const trimmed = text.trim().slice(0, CHAT_MESSAGE_MAX_LENGTH);
       if (!trimmed) return;
@@ -133,9 +135,33 @@ export function registerSocketHandlers(io: StreamServer): void {
         fromName: member?.firstName ?? socket.data.user.firstName,
         text: trimmed,
         sentAt: Date.now(),
+        replyTo,
       };
       addChatMessage(room, message);
       io.to(currentRoomId).emit("chat:message", message);
+    });
+
+    socket.on("chat:edit", ({ id, text }) => {
+      if (!currentRoomId) return;
+      const trimmed = text.trim().slice(0, CHAT_MESSAGE_MAX_LENGTH);
+      if (!trimmed) return;
+      const room = getRoom(currentRoomId);
+      if (!room) return;
+      const existing = room.messages.find((m) => m.id === id);
+      if (!existing || existing.fromUserId !== socket.data.user.id) return; // only the author may edit
+
+      const updated = editChatMessage(room, id, trimmed);
+      if (updated) io.to(currentRoomId).emit("chat:message-updated", updated);
+    });
+
+    socket.on("chat:delete", ({ id }) => {
+      if (!currentRoomId) return;
+      const room = getRoom(currentRoomId);
+      if (!room) return;
+      const existing = room.messages.find((m) => m.id === id);
+      if (!existing || existing.fromUserId !== socket.data.user.id) return; // only the author may delete
+
+      if (deleteChatMessage(room, id)) io.to(currentRoomId).emit("chat:message-deleted", { id });
     });
 
     socket.on("queue:add", ({ source }) => {
@@ -188,6 +214,20 @@ export function registerSocketHandlers(io: StreamServer): void {
     });
 
     socket.on("time:sync", (_payload, cb) => cb({ serverTime: Date.now() }));
+
+    socket.on("sync:report", ({ driftSeconds, isBuffering }) => {
+      if (!currentRoomId) return;
+      // Includes the sender too (not socket.to) — this is diagnostic-only,
+      // so there's no echo-jitter concern like with playback actions, and
+      // it's simplest for every client (including the reporter) to read
+      // everyone's health the same way.
+      io.to(currentRoomId).emit("sync:status", {
+        userId: socket.data.user.id,
+        driftSeconds,
+        isBuffering,
+        updatedAt: Date.now(),
+      });
+    });
 
     socket.on("disconnect", leaveCurrentRoom);
   });

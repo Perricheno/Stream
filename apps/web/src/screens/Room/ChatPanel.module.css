@@ -1,7 +1,26 @@
 .panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.closeButton {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tg-theme-secondary-bg-color, rgba(0, 0, 0, 0.35));
+  color: var(--tg-theme-hint-color, #708499);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .listWrapper {
@@ -55,11 +74,14 @@
 
 .row {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   animation: fadeSlideUp 0.2s ease;
 }
 
 .rowOwn {
-  justify-content: flex-end;
+  align-items: flex-end;
 }
 
 .bubble {
@@ -69,6 +91,10 @@
   padding: 6px 10px 4px;
   display: flex;
   flex-direction: column;
+  cursor: pointer;
+}
+.bubble:active {
+  filter: brightness(0.93);
 }
 
 .own {
@@ -94,6 +120,101 @@
   font-size: 10px;
   opacity: 0.6;
   margin-top: 2px;
+}
+
+.editedLabel {
+  font-style: italic;
+}
+
+.replyQuote {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-bottom: 4px;
+  padding: 3px 8px;
+  border-left: 2px solid currentColor;
+  border-radius: 4px;
+  background: rgba(127, 127, 127, 0.15);
+  opacity: 0.85;
+}
+
+.replySender {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.replyText {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actionRow {
+  display: flex;
+  gap: 6px;
+}
+
+.actionChip {
+  border: none;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--tg-theme-secondary-bg-color, #212121);
+  color: var(--tg-theme-text-color, #fff);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.actionChipDestructive {
+  color: var(--tg-theme-destructive-text-color, #ec3942);
+}
+
+.composeBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-top: 0.5px solid var(--tg-theme-section-separator-color, rgba(118, 118, 128, 0.2));
+  border-left: 3px solid var(--tg-theme-button-color, #3390ec);
+  background: var(--tg-theme-secondary-bg-color, rgba(127, 127, 127, 0.08));
+}
+
+.composeBannerText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.composeBannerLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tg-theme-accent-text-color, #3390ec);
+}
+
+.composeBannerSnippet {
+  font-size: 13px;
+  color: var(--tg-theme-hint-color, #708499);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composeBannerClose {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--tg-theme-hint-color, #708499);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .inputRow {

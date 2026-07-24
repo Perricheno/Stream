@@ -1,8 +1,41 @@
 import { Avatar, Cell, IconButton, List, Modal, Section } from "@telegram-apps/telegram-ui";
-import type { Participant } from "@stream/shared";
+import { DRIFT_TOLERANCE_SECONDS, type Participant } from "@stream/shared";
 import { useTranslation } from "../../i18n/useTranslation";
 import { confirmAction } from "../../telegram/confirmAction";
 import { ModalBackdrop } from "../../components/ModalBackdrop";
+import type { ParticipantSyncHealth } from "../../status/useParticipantSyncHealth";
+
+/** Stale reports (backgrounded tab, dying connection) shouldn't keep
+ *  showing as "in sync" forever just because nothing new arrived to say
+ *  otherwise. */
+const HEALTH_STALE_MS = 12_000;
+
+function SyncHealthDot({ health }: { health: ParticipantSyncHealth | undefined }) {
+  const isStale = !health || Date.now() - health.updatedAt > HEALTH_STALE_MS;
+  const color = isStale
+    ? "var(--tg-theme-hint-color, #708499)"
+    : health.isBuffering
+      ? "#f2a93b"
+      : Math.abs(health.driftSeconds) > DRIFT_TOLERANCE_SECONDS * 2
+        ? "#ec3942"
+        : "#4dbd6d";
+  const label = isStale ? "нет данных" : health.isBuffering ? "буферизация" : `рассинхрон ${health.driftSeconds.toFixed(1)} с`;
+
+  return (
+    <span
+      title={label}
+      aria-label={`Синхронизация: ${label}`}
+      style={{
+        display: "inline-block",
+        width: 8,
+        height: 8,
+        borderRadius: "50%",
+        background: color,
+        flexShrink: 0,
+      }}
+    />
+  );
+}
 
 function RemoveIcon() {
   return (
@@ -28,6 +61,7 @@ interface ParticipantsModalProps {
   isHost: boolean;
   onKick: (userId: number) => void;
   onInvite: () => void;
+  syncHealth: Record<number, ParticipantSyncHealth>;
 }
 
 export function ParticipantsModal({
@@ -38,6 +72,7 @@ export function ParticipantsModal({
   isHost,
   onKick,
   onInvite,
+  syncHealth,
 }: ParticipantsModalProps) {
   const { t } = useTranslation();
 
@@ -75,16 +110,19 @@ export function ParticipantsModal({
                 }
                 subtitle={participant.isHost ? t("hostBadge") : undefined}
                 after={
-                  kickable ? (
-                    <IconButton
-                      mode="plain"
-                      size="s"
-                      onClick={() => handleKick(participant)}
-                      aria-label={`${t("removeParticipant")} ${participant.firstName}`}
-                    >
-                      <RemoveIcon />
-                    </IconButton>
-                  ) : undefined
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <SyncHealthDot health={syncHealth[participant.userId]} />
+                    {kickable && (
+                      <IconButton
+                        mode="plain"
+                        size="s"
+                        onClick={() => handleKick(participant)}
+                        aria-label={`${t("removeParticipant")} ${participant.firstName}`}
+                      >
+                        <RemoveIcon />
+                      </IconButton>
+                    )}
+                  </div>
                 }
               >
                 {participant.firstName}

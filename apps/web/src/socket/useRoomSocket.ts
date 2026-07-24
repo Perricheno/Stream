@@ -71,6 +71,18 @@ export function useRoomSocket(roomId: string | undefined): RoomSocketState {
           : prev,
       );
     };
+    const onChatMessageUpdated = (message: ChatMessage) => {
+      setState((prev) =>
+        prev.room
+          ? { ...prev, room: { ...prev.room, messages: prev.room.messages.map((m) => (m.id === message.id ? message : m)) } }
+          : prev,
+      );
+    };
+    const onChatMessageDeleted = ({ id }: { id: string }) => {
+      setState((prev) =>
+        prev.room ? { ...prev, room: { ...prev.room, messages: prev.room.messages.filter((m) => m.id !== id) } } : prev,
+      );
+    };
     const onError = (payload: { code: string; message: string }) => {
       setState({ status: "error", room: null, error: payload.message });
     };
@@ -109,6 +121,8 @@ export function useRoomSocket(roomId: string | undefined): RoomSocketState {
     socket.on("playback:source-changed", onSourceChanged);
     socket.on("queue:updated", onQueueUpdated);
     socket.on("chat:message", onChatMessage);
+    socket.on("chat:message-updated", onChatMessageUpdated);
+    socket.on("chat:message-deleted", onChatMessageDeleted);
     socket.on("room:error", onError);
     socket.on("room:kicked", onKicked);
     socket.on("connect_error", onConnectError);
@@ -124,6 +138,8 @@ export function useRoomSocket(roomId: string | undefined): RoomSocketState {
       socket.off("playback:source-changed", onSourceChanged);
       socket.off("queue:updated", onQueueUpdated);
       socket.off("chat:message", onChatMessage);
+      socket.off("chat:message-updated", onChatMessageUpdated);
+      socket.off("chat:message-deleted", onChatMessageDeleted);
       socket.off("room:error", onError);
       socket.off("room:kicked", onKicked);
       socket.off("connect_error", onConnectError);

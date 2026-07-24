@@ -1,6 +1,7 @@
 import {
   CHAT_HISTORY_LIMIT,
   QUEUE_MAX_LENGTH,
+  type ActiveFriendRoom,
   type ChatMessage,
   type Participant,
   type QueueItem,
@@ -42,6 +43,29 @@ export function getRoom(roomId: string): Room | undefined {
 
 export function getRoomCount(): number {
   return rooms.size;
+}
+
+/** One entry per (friend, room) they're currently a member of — a friend
+ *  who's host of a room with others already in it still shows up once per
+ *  room, not once per person in it. Scans the in-memory room map directly;
+ *  fine at this scale (a personal-use app, not thousands of concurrent
+ *  rooms) and avoids keeping a separate userId->room index in sync. */
+export function listActiveRoomsForFriends(friendUserIds: number[]): ActiveFriendRoom[] {
+  if (friendUserIds.length === 0) return [];
+  const friendIdSet = new Set(friendUserIds);
+  const result: ActiveFriendRoom[] = [];
+  for (const room of rooms.values()) {
+    const friendMember = room.members.find((member) => friendIdSet.has(member.userId));
+    if (!friendMember) continue;
+    result.push({
+      roomId: room.id,
+      friendUserId: friendMember.userId,
+      friendName: friendMember.firstName,
+      participantCount: room.members.length,
+      hasSource: room.source !== null,
+    });
+  }
+  return result;
 }
 
 export function addMember(room: Room, member: RoomMember): void {
@@ -110,6 +134,22 @@ export function addChatMessage(room: Room, message: ChatMessage): void {
   if (room.messages.length > CHAT_HISTORY_LIMIT) {
     room.messages.splice(0, room.messages.length - CHAT_HISTORY_LIMIT);
   }
+}
+
+/** Ownership (only the author may edit their own message) is checked by the
+ *  caller — this just applies the mutation once that's confirmed. */
+export function editChatMessage(room: Room, messageId: string, text: string): ChatMessage | null {
+  const message = room.messages.find((m) => m.id === messageId);
+  if (!message) return null;
+  message.text = text;
+  message.editedAt = Date.now();
+  return message;
+}
+
+export function deleteChatMessage(room: Room, messageId: string): boolean {
+  const before = room.messages.length;
+  room.messages = room.messages.filter((m) => m.id !== messageId);
+  return room.messages.length < before;
 }
 
 /** Appends a queue item, capping length so a room can't be griefed into an unbounded queue. */
