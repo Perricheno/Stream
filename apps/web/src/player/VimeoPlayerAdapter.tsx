@@ -20,6 +20,7 @@ export const VimeoPlayerAdapter = forwardRef<PlayerHandle, VimeoPlayerAdapterPro
       ref,
       () => ({
         isReady: () => elRef.current !== null,
+        hasLoadedMetadata: () => (elRef.current?.readyState ?? 0) >= 1,
         play: () => void elRef.current?.play(),
         pause: () => elRef.current?.pause(),
         seekTo: (seconds) => {
@@ -39,6 +40,8 @@ export const VimeoPlayerAdapter = forwardRef<PlayerHandle, VimeoPlayerAdapterPro
         setPlaybackRate: (rate) => {
           if (elRef.current) elRef.current.playbackRate = rate;
         },
+        // Vimeo's player.js SDK accepts any rate in [0.5, 2] as given.
+        supportsFinePlaybackRate: () => true,
       }),
       [],
     );
@@ -47,14 +50,16 @@ export const VimeoPlayerAdapter = forwardRef<PlayerHandle, VimeoPlayerAdapterPro
       const el = elRef.current;
       if (!el) return;
 
+      // Each handler checks a suppression deadline instead of a plain flag —
+      // see suppressed's doc comment in useSyncedPlayback.ts.
       const handlePlay = () => {
-        if (!suppressed.current) onPlay(el.currentTime);
+        if (Date.now() >= suppressed.current) onPlay(el.currentTime);
       };
       const handlePause = () => {
-        if (!suppressed.current) onPause(el.currentTime);
+        if (Date.now() >= suppressed.current) onPause(el.currentTime);
       };
       const handleSeeked = () => {
-        if (!suppressed.current) onSeek(el.currentTime);
+        if (Date.now() >= suppressed.current) onSeek(el.currentTime);
       };
       const handleEnded = () => onEnded();
       const handleWaiting = () => onBuffering(true);
@@ -81,6 +86,9 @@ export const VimeoPlayerAdapter = forwardRef<PlayerHandle, VimeoPlayerAdapterPro
         ref={elRef}
         className={styles.fill}
         playsInline
+        // See YouTubePlayerAdapter.tsx's identical comment — start buffering
+        // as soon as a source is picked, not lazily on first play().
+        preload="auto"
         src={`https://vimeo.com/${videoId}`}
         config={{ autopause: false, responsive: true }}
       />

@@ -4,14 +4,13 @@ export interface PlaybackSyncPayload extends PlaybackState {
   originUserId: number;
 }
 
-/** If a client's local position drifts from the expected position by more
- * than this, start closing the gap (a gentle rate nudge below
- * SOFT_CORRECTION_MAX_SECONDS in useSyncedPlayback.ts, a hard seek above it).
- * Below this, do nothing to avoid seek-storms over drift nobody would
- * actually notice. Tighter than it used to be — now that useServerClock.ts
- * corrects for each device's own clock skew, a smaller tolerance no longer
- * risks constant corrections from clock error alone, and 1.5s of real
- * drift between two phones sitting next to each other is very audible. */
+/** How much drift counts as "notably" out of sync for display purposes (the
+ * participants list's sync-health dot, see ParticipantsModal.tsx) — not the
+ * threshold the correction logic itself acts on. That one lives in
+ * useSyncedPlayback.ts as its own, much smaller DRIFT_DEADZONE_SECONDS,
+ * since actively correcting drift and flagging it as a visible "something's
+ * wrong" signal call for very different sensitivities: the correction
+ * should kick in on drift far below what's worth alarming anyone about. */
 export const DRIFT_TOLERANCE_SECONDS = 0.75;
 
 /** How long a client ignores an incoming sync that matches its own just-sent

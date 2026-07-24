@@ -102,19 +102,34 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
     const tryPlay = () => {
       if (cancelled) return;
       if (synced.playerRef.current?.isReady()) {
-        synced.playerRef.current.play();
+        if (isHostRef.current) {
+          // See startPlaybackNow's doc comment — reports this to the server
+          // immediately instead of waiting for the player's own native "play"
+          // event, which for YouTube/Vimeo only fires once their iframe
+          // finishes a multi-second load handshake.
+          synced.startPlaybackNow(0);
+        } else {
+          // A non-host participant's own autoplay must never "establish"
+          // playback state the way startPlaybackNow does — this effect fires
+          // for every participant (so everyone's video actually starts, since
+          // nothing autoplays on its own), but only the host's action is the
+          // room's canonical start. For anyone else, the sync layer's own
+          // initial-sync effect (using the room's real state) is what
+          // decides the correct position; this just needs to get the local
+          // player moving, not report anything.
+          synced.playerRef.current.play();
+        }
         return;
       }
       attempts += 1;
       if (attempts >= 50) return; // ~10s
       setTimeout(tryPlay, 200);
     };
-    const timer = setTimeout(tryPlay, 800);
+    tryPlay();
     return () => {
       cancelled = true;
-      clearTimeout(timer);
     };
-  }, [room?.source, profile?.autoplay, synced.playerRef]);
+  }, [room?.source, profile?.autoplay, synced.playerRef, synced.startPlaybackNow]);
 
   // Chat is always visible docked under the video normally, so there's
   // nothing to badge — but the fullscreen slide-in panel (see below) can be

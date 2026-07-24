@@ -19,6 +19,7 @@ export const Html5PlayerAdapter = forwardRef<PlayerHandle, Html5PlayerAdapterPro
         // A <video> element's methods are always immediately callable, no
         // handshake to wait for — ready the instant it's mounted.
         isReady: () => videoRef.current !== null,
+        hasLoadedMetadata: () => (videoRef.current?.readyState ?? 0) >= 1,
         play: () => void videoRef.current?.play(),
         pause: () => videoRef.current?.pause(),
         seekTo: (seconds) => {
@@ -41,6 +42,7 @@ export const Html5PlayerAdapter = forwardRef<PlayerHandle, Html5PlayerAdapterPro
         setPlaybackRate: (rate) => {
           if (videoRef.current) videoRef.current.playbackRate = rate;
         },
+        supportsFinePlaybackRate: () => true,
       }),
       [],
     );
@@ -64,14 +66,16 @@ export const Html5PlayerAdapter = forwardRef<PlayerHandle, Html5PlayerAdapterPro
       const video = videoRef.current;
       if (!video) return;
 
+      // Each handler checks a suppression deadline instead of a plain flag —
+      // see suppressed's doc comment in useSyncedPlayback.ts.
       const handlePlay = () => {
-        if (!suppressed.current) onPlay(video.currentTime);
+        if (Date.now() >= suppressed.current) onPlay(video.currentTime);
       };
       const handlePause = () => {
-        if (!suppressed.current) onPause(video.currentTime);
+        if (Date.now() >= suppressed.current) onPause(video.currentTime);
       };
       const handleSeeked = () => {
-        if (!suppressed.current) onSeek(video.currentTime);
+        if (Date.now() >= suppressed.current) onSeek(video.currentTime);
       };
       const handleEnded = () => onEnded();
       // "waiting"/"playing" is the spec pair for stall start/end — "playing"

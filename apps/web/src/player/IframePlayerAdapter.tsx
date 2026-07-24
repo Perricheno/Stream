@@ -25,6 +25,7 @@ export const IframePlayerAdapter = forwardRef<PlayerHandle, IframePlayerAdapterP
         // here is already an inert no-op, so there's no "not ready yet"
         // state to report.
         isReady: () => true,
+        hasLoadedMetadata: () => true,
         play: () => {},
         pause: () => {},
         seekTo: () => {},
@@ -35,6 +36,7 @@ export const IframePlayerAdapter = forwardRef<PlayerHandle, IframePlayerAdapterP
         setVolume: () => {},
         getPlaybackRate: () => 1,
         setPlaybackRate: () => {},
+        supportsFinePlaybackRate: () => false,
       }),
       [],
     );

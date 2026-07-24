@@ -32,6 +32,7 @@ export const YouTubePlayerAdapter = forwardRef<PlayerHandle, YouTubePlayerAdapte
         // HTMLVideoElement and handles calls made before load the same safe
         // way, no postMessage handshake to wait for from the outside.
         isReady: () => elRef.current !== null,
+        hasLoadedMetadata: () => (elRef.current?.readyState ?? 0) >= 1,
         play: () => void elRef.current?.play(),
         pause: () => elRef.current?.pause(),
         seekTo: (seconds) => {
@@ -51,6 +52,9 @@ export const YouTubePlayerAdapter = forwardRef<PlayerHandle, YouTubePlayerAdapte
         setPlaybackRate: (rate) => {
           if (elRef.current) elRef.current.playbackRate = rate;
         },
+        // YouTube's IFrame API rounds to its own fixed set of rates —
+        // see playerTypes.ts's doc comment on this method.
+        supportsFinePlaybackRate: () => false,
       }),
       [],
     );
@@ -59,14 +63,20 @@ export const YouTubePlayerAdapter = forwardRef<PlayerHandle, YouTubePlayerAdapte
       const el = elRef.current;
       if (!el) return;
 
+      // Each handler checks a suppression deadline instead of a plain flag —
+      // this element queues play()/pause()/currentTime until its iframe
+      // finishes loading, which can take several seconds and doesn't
+      // reliably produce just one confirming event, so a boolean (or count)
+      // cleared "next frame"/"next event" would already be gone long before
+      // the real confirmation shows up. See suppressed's doc comment.
       const handlePlay = () => {
-        if (!suppressed.current) onPlay(el.currentTime);
+        if (Date.now() >= suppressed.current) onPlay(el.currentTime);
       };
       const handlePause = () => {
-        if (!suppressed.current) onPause(el.currentTime);
+        if (Date.now() >= suppressed.current) onPause(el.currentTime);
       };
       const handleSeeked = () => {
-        if (!suppressed.current) onSeek(el.currentTime);
+        if (Date.now() >= suppressed.current) onSeek(el.currentTime);
       };
       const handleEnded = () => onEnded();
       const handleWaiting = () => onBuffering(true);
@@ -93,6 +103,11 @@ export const YouTubePlayerAdapter = forwardRef<PlayerHandle, YouTubePlayerAdapte
         ref={elRef}
         className={styles.fill}
         playsInline
+        // Start buffering the moment a source is picked instead of waiting
+        // for a play() call — the default ("metadata") only fetches enough
+        // to report duration/thumbnail, leaving actual playback to start
+        // fetching from zero right when speed matters most.
+        preload="auto"
         // Privacy-enhanced mode — YouTube won't set tracking cookies until
         // the viewer actually presses play. modestbranding/controls=0 are
         // this element's own defaults (see its README), not set here.
