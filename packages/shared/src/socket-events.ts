@@ -7,6 +7,18 @@ export interface JoinRoomResult {
   ok: boolean;
   error?: string;
   state?: RoomStatePayload;
+  /** The server's own record of who you are (from validated initData) —
+   *  the client should use this for every "is this me" comparison (host
+   *  check, own-message check, etc.) instead of re-deriving its own id from
+   *  the Telegram SDK a second time. Those two paths aren't guaranteed to
+   *  agree: the SDK's typed initData parser can throw on some real clients
+   *  (a documented issue: github.com/Telegram-Mini-Apps/telegram-apps/issues/683)
+   *  and fall back to a mock identity for UI purposes, while the socket's
+   *  own auth (which reads the raw initData string directly) still
+   *  succeeds with the real one — silently desyncing "who the app thinks
+   *  you are" from "who the server knows you are".
+   */
+  yourUserId?: number;
 }
 
 export interface JoinRoomPayload {

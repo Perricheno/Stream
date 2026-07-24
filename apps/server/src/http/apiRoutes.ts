@@ -3,7 +3,7 @@ import { DISPLAY_NAME_MAX_LENGTH } from "@stream/shared";
 import { env } from "../config/env";
 import { getProfile, getUserBasics, updateProfile } from "../db/userRepository";
 import { addFriendship, listFriends } from "../db/friendRepository";
-import { getRoom, listActiveRoomsForFriends } from "../rooms/RoomStore";
+import { getRoom, listActiveRooms } from "../rooms/RoomStore";
 import { sendTelegramMessage } from "../telegram/sendTelegramMessage";
 import { requireTelegramAuth } from "./requireTelegramAuth";
 import "./types";
@@ -39,9 +39,8 @@ apiRoutes.get("/friends", (req, res) => {
   res.json(listFriends(req.telegramUser!.id));
 });
 
-apiRoutes.get("/friends/active-rooms", (req, res) => {
-  const friendIds = listFriends(req.telegramUser!.id).map((friend) => friend.userId);
-  res.json(listActiveRoomsForFriends(friendIds));
+apiRoutes.get("/rooms/active", (_req, res) => {
+  res.json(listActiveRooms());
 });
 
 apiRoutes.post("/friends/add", (req, res) => {

@@ -100,7 +100,7 @@ export function registerSocketHandlers(io: StreamServer): void {
       socket.join(roomId);
       currentRoomId = roomId;
 
-      const result: JoinRoomResult = { ok: true, state: toStatePayload(room) };
+      const result: JoinRoomResult = { ok: true, state: toStatePayload(room), yourUserId: socket.data.user.id };
       callback(result);
       socket.to(roomId).emit("room:participants", toParticipants(room));
     });

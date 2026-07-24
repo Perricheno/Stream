@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ActiveFriendRoom } from "@stream/shared";
+import type { ActiveRoom } from "@stream/shared";
 import { api } from "../api/apiClient";
 
 const POLL_MS = 15_000;
 
-/** Friends' currently-open rooms, refreshed on a timer — lets Home surface
- *  "X is watching something" without anyone having to send a link first. */
-export function useActiveFriendRooms() {
-  const [rooms, setRooms] = useState<ActiveFriendRoom[]>([]);
+/** Every currently-open room, refreshed on a timer — lets Home surface
+ *  "something is being watched right now" without anyone having to send a
+ *  link first. Not friend-gated (see ActiveRoom's doc comment). */
+export function useActiveRooms() {
+  const [rooms, setRooms] = useState<ActiveRoom[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   const refresh = useCallback(() => {
     return api
-      .get<ActiveFriendRoom[]>("/friends/active-rooms")
+      .get<ActiveRoom[]>("/rooms/active")
       .then((data) => {
         setRooms(data);
         setLoaded(true);

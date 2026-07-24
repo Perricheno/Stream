@@ -15,6 +15,11 @@ export interface RoomSocketState {
   status: RoomConnectionStatus;
   room: RoomStatePayload | null;
   error: string | null;
+  /** The server's own record of who you are — see JoinRoomResult's doc
+   *  comment for why this, not the Telegram SDK's own initData signal, is
+   *  the one to use for "is this me" checks (host status, own messages,
+   *  etc.) throughout the room. */
+  yourUserId: number | null;
 }
 
 /**
@@ -33,21 +38,21 @@ export interface RoomSocketState {
  * every reconnect too) replaces local state with the server's fresh state.
  */
 export function useRoomSocket(roomId: string | undefined): RoomSocketState {
-  const [state, setState] = useState<RoomSocketState>({ status: "idle", room: null, error: null });
+  const [state, setState] = useState<RoomSocketState>({ status: "idle", room: null, error: null, yourUserId: null });
   const joinedRoomRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!roomId) return;
 
-    setState({ status: "connecting", room: null, error: null });
+    setState({ status: "connecting", room: null, error: null, yourUserId: null });
 
     const join = () => {
       socket.emit("room:join", { roomId }, (res) => {
         if (res.ok && res.state) {
           joinedRoomRef.current = roomId;
-          setState({ status: "joined", room: res.state, error: null });
+          setState({ status: "joined", room: res.state, error: null, yourUserId: res.yourUserId ?? null });
         } else {
-          setState({ status: "error", room: null, error: res.error ?? "Failed to join room" });
+          setState({ status: "error", room: null, error: res.error ?? "Failed to join room", yourUserId: null });
         }
       });
     };
@@ -84,11 +89,11 @@ export function useRoomSocket(roomId: string | undefined): RoomSocketState {
       );
     };
     const onError = (payload: { code: string; message: string }) => {
-      setState({ status: "error", room: null, error: payload.message });
+      setState({ status: "error", room: null, error: payload.message, yourUserId: null });
     };
     const onKicked = () => {
       joinedRoomRef.current = null;
-      setState({ status: "kicked", room: null, error: null });
+      setState({ status: "kicked", room: null, error: null, yourUserId: null });
     };
     let lastConnectErrorMessage = "";
     const onConnectError = (err: Error) => {
@@ -101,6 +106,7 @@ export function useRoomSocket(roomId: string | undefined): RoomSocketState {
         error: lastConnectErrorMessage
           ? `Не удалось подключиться: ${lastConnectErrorMessage}`
           : "Не удалось подключиться к серверу",
+        yourUserId: null,
       });
     };
 

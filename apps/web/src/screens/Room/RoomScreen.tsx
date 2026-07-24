@@ -6,7 +6,6 @@ import { useBackButton } from "../../telegram/useBackButton";
 import { useClosingConfirmation } from "../../telegram/useClosingConfirmation";
 import { useVisualViewportHeight } from "../../telegram/useVisualViewportHeight";
 import { useHapticFeedback } from "../../telegram/useHapticFeedback";
-import { useTelegramUser } from "../../telegram/useInitData";
 import { useProfile } from "../../telegram/ProfileContext";
 import { confirmAction } from "../../telegram/confirmAction";
 import { useTranslation } from "../../i18n/useTranslation";
@@ -44,11 +43,10 @@ interface RoomScreenProps {
 }
 
 export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
-  const { status, room, error } = useRoomSocket(roomId);
+  const { status, room, error, yourUserId } = useRoomSocket(roomId);
   const { profile } = useProfile();
   const { t } = useTranslation();
   const haptics = useHapticFeedback();
-  const telegramUser = useTelegramUser();
   const synced = useSyncedPlayback(socket, room?.playback ?? null);
   const syncHealth = useParticipantSyncHealth(socket);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -72,7 +70,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
   const lastHostIdRef = useRef<number | null>(null);
   const isHostRef = useRef(false);
   const currentHostId = room?.participants.find((p) => p.isHost)?.userId ?? null;
-  const isHost = currentHostId !== null && currentHostId === telegramUser?.id;
+  const isHost = currentHostId !== null && currentHostId === yourUserId;
 
   useEffect(() => {
     isHostRef.current = isHost;
@@ -278,7 +276,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
         <ChatPanel
           className={styles.chatFill}
           messages={room.messages}
-          currentUserId={telegramUser?.id}
+          currentUserId={yourUserId ?? undefined}
           onSend={sendChat}
           onEdit={editChat}
           onDelete={deleteChat}
@@ -306,7 +304,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
         <ChatPanel
           className={styles.chatOverlay}
           messages={room.messages}
-          currentUserId={telegramUser?.id}
+          currentUserId={yourUserId ?? undefined}
           onSend={sendChat}
           onEdit={editChat}
           onDelete={deleteChat}
@@ -318,7 +316,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
         open={participantsOpen}
         onOpenChange={setParticipantsOpen}
         participants={room.participants}
-        currentUserId={telegramUser?.id}
+        currentUserId={yourUserId ?? undefined}
         isHost={isHost}
         onKick={kickParticipant}
         onInvite={() => setFriendsOpen(true)}

@@ -1,7 +1,7 @@
 import {
   CHAT_HISTORY_LIMIT,
   QUEUE_MAX_LENGTH,
-  type ActiveFriendRoom,
+  type ActiveRoom,
   type ChatMessage,
   type Participant,
   type QueueItem,
@@ -45,22 +45,23 @@ export function getRoomCount(): number {
   return rooms.size;
 }
 
-/** One entry per (friend, room) they're currently a member of — a friend
- *  who's host of a room with others already in it still shows up once per
- *  room, not once per person in it. Scans the in-memory room map directly;
- *  fine at this scale (a personal-use app, not thousands of concurrent
- *  rooms) and avoids keeping a separate userId->room index in sync. */
-export function listActiveRoomsForFriends(friendUserIds: number[]): ActiveFriendRoom[] {
-  if (friendUserIds.length === 0) return [];
-  const friendIdSet = new Set(friendUserIds);
-  const result: ActiveFriendRoom[] = [];
+/** One entry per currently-active room (at least one member actually
+ *  connected — a room can briefly linger in the map with zero members
+ *  during its post-empty grace period, see removeMember, and that's not
+ *  "active"). No friendship gate: this is a small app for one person and
+ *  their circle, not a public service, so every open room is visible to
+ *  everyone rather than requiring an explicit in-app friend relationship
+ *  first. Scans the in-memory room map directly; fine at this scale (not
+ *  thousands of concurrent rooms) and avoids keeping a separate index. */
+export function listActiveRooms(): ActiveRoom[] {
+  const result: ActiveRoom[] = [];
   for (const room of rooms.values()) {
-    const friendMember = room.members.find((member) => friendIdSet.has(member.userId));
-    if (!friendMember) continue;
+    const host = room.members.find((member) => member.socketId === room.hostSocketId);
+    if (!host) continue;
     result.push({
       roomId: room.id,
-      friendUserId: friendMember.userId,
-      friendName: friendMember.firstName,
+      hostUserId: host.userId,
+      hostName: host.firstName,
       participantCount: room.members.length,
       hasSource: room.source !== null,
     });

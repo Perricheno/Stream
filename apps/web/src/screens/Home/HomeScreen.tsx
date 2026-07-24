@@ -5,7 +5,7 @@ import { parseRoomCodeFromScan } from "../../app/parseRoomLink";
 import { useHapticFeedback } from "../../telegram/useHapticFeedback";
 import { useRecentRooms } from "../../telegram/useRecentRooms";
 import { useFriends } from "../../telegram/useFriends";
-import { useActiveFriendRooms } from "../../telegram/useActiveFriendRooms";
+import { useActiveRooms } from "../../telegram/useActiveRooms";
 import { useFullscreen } from "../../telegram/useFullscreen";
 import { useHomeScreenPrompt } from "../../telegram/useHomeScreenPrompt";
 import { useTranslation } from "../../i18n/useTranslation";
@@ -14,7 +14,7 @@ import { ServiceStatusIndicator } from "../../status/ServiceStatusIndicator";
 import { ModalBackdrop } from "../../components/ModalBackdrop";
 import { CreateRoomCard } from "./CreateRoomCard";
 import { RecentRoomsList } from "./RecentRoomsList";
-import { ActiveFriendRoomsList } from "./ActiveFriendRoomsList";
+import { ActiveRoomsList } from "./ActiveRoomsList";
 
 // Both are modals only needed once actually opened — Home is the one screen
 // that's never itself lazy, so anything imported eagerly here ships in the
@@ -74,7 +74,7 @@ interface HomeScreenProps {
 export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
   const { rooms, loaded, addRoom } = useRecentRooms();
   const { addFriend } = useFriends();
-  const { rooms: activeFriendRooms } = useActiveFriendRooms();
+  const { rooms: activeRooms } = useActiveRooms();
   const haptics = useHapticFeedback();
   const { t } = useTranslation();
   const fullscreen = useFullscreen();
@@ -107,7 +107,7 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
       .catch(() => haptics.notify("error"));
   }, [autoAddFriendId, addFriend, haptics, openFriends]);
 
-  const openFriendRoom = useCallback(
+  const openActiveRoom = useCallback(
     (roomId: string) => {
       haptics.impact("medium");
       addRoom(roomId);
@@ -187,7 +187,7 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
         </Section>
       )}
 
-      <ActiveFriendRoomsList rooms={activeFriendRooms} onOpenRoom={openFriendRoom} />
+      <ActiveRoomsList rooms={activeRooms} onOpenRoom={openActiveRoom} />
 
       <RecentRoomsList rooms={loaded ? rooms : null} onOpenRoom={onOpenRoom} />
 
