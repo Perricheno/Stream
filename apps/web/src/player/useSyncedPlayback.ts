@@ -171,9 +171,25 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
     // browser recover on its own. play()/pause() below still always reflect
     // the real command regardless — only the drift-closing part backs off.
     if (!isBufferingRef.current && hasLoaded) {
-      const expected = computeExpectedPosition(payload, serverNow());
+      // Clamp to the video's real length: the shared timeline keeps advancing
+      // `positionSeconds` from a server timestamp with no knowledge of
+      // duration, so once a video plays past its end with nothing next in the
+      // queue, an unclamped "expected" grows without bound and this code
+      // hard-seeks the player past the end every recheck.
+      const duration = player.getDuration();
+      const rawExpected = computeExpectedPosition(payload, serverNow());
+      const expected = duration > 0 ? Math.min(rawExpected, duration) : rawExpected;
+      const atEnd = duration > 0 && rawExpected >= duration - 0.25;
       const drift = player.getCurrentTime() - expected;
       const absDrift = Math.abs(drift);
+
+      // The room thinks it's still playing but the video has run out — don't
+      // fight the ended player with seeks/rate nudges; just let it sit.
+      if (atEnd) {
+        stopSoftCorrection();
+        lastCommandedPlayingRef.current = false;
+        return;
+      }
 
       if (forceSeek || absDrift > SOFT_CORRECTION_MAX_SECONDS) {
         // Too far off for a rate nudge to close in reasonable time — jump.

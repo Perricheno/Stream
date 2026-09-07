@@ -222,11 +222,17 @@ export function RoomScreen({ roomId, onExit, initialVideoId }: RoomScreenProps) 
     socket.emit("room:kick", { targetUserId });
   }, []);
 
-  // Only the host's client drives auto-advance — if every participant's
-  // player fired this independently, they'd race to pop the same queue item.
+  // Only the host's client drives end-of-video handling — if every
+  // participant's player fired this, they'd race to pop the same queue item.
+  // Pause the room at the end position first: with an empty queue,
+  // queue:advance is a server-side no-op, so without this the room state
+  // stays isPlaying:true forever and every client's sync layer keeps trying
+  // to seek to an ever-growing "expected" position past the end of the video.
   const handleEnded = useCallback(() => {
-    if (isHostRef.current) socket.emit("queue:advance");
-  }, []);
+    if (!isHostRef.current) return;
+    synced.onPause(synced.playerRef.current?.getCurrentTime() ?? 0);
+    socket.emit("queue:advance");
+  }, [synced.onPause, synced.playerRef]);
 
   const addToQueue = useCallback((source: VideoSource) => {
     socket.emit("queue:add", { source });
