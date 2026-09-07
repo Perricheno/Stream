@@ -135,6 +135,68 @@ test("when the host leaves, the guest is promoted and their play is authoritativ
   }),
 );
 
+test("ANY participant may pause the room, and the position comes from the server clock", { timeout: TIMEOUT }, () =>
+  withClients(2, async ([host, guest]) => {
+    const id = roomId();
+    await joinRoom(host, id);
+    const guestJoin = await joinRoom(guest, id);
+
+    // Host starts playback at 0, then ~600ms passes.
+    host.emit("playback:play", { atSeconds: 0, clientTimestamp: Date.now() });
+    await new Promise((r) => setTimeout(r, 600));
+
+    // The guest (NOT the host) asks for a pause — this is the "I backgrounded
+    // the app" path, and it must be honoured even though play/seek aren't.
+    const onHost = once<{ isPlaying: boolean; positionSeconds: number }>(host, "playback:sync");
+    const reasonSeen = once<{ userId: number; userName: string; reason: string }>(host, "playback:paused-by");
+    guest.emit("playback:request-pause", { reason: "away" });
+
+    const sync = await onHost;
+    const pausedBy = await reasonSeen;
+    assert.equal(sync.isPlaying, false, "room is paused");
+    // Server used its own elapsed time, not a client-supplied position.
+    assert.ok(sync.positionSeconds >= 0.4, `position advanced with the clock (got ${sync.positionSeconds})`);
+    assert.ok(sync.positionSeconds < 5, `position is the real elapsed time (got ${sync.positionSeconds})`);
+    assert.equal(pausedBy.userId, guestJoin.yourUserId);
+    assert.equal(pausedBy.reason, "away");
+  }),
+);
+
+test("a participant leaving while playing pauses the room for whoever is left", { timeout: TIMEOUT }, () =>
+  withClients(2, async ([host, guest]) => {
+    const id = roomId();
+    await joinRoom(host, id);
+    await joinRoom(guest, id);
+
+    host.emit("playback:play", { atSeconds: 0, clientTimestamp: Date.now() });
+    await new Promise((r) => setTimeout(r, 300));
+
+    const paused = once<{ isPlaying: boolean }>(host, "playback:sync");
+    const why = once<{ reason: string }>(host, "playback:paused-by");
+    guest.emit("room:leave");
+
+    assert.equal((await paused).isPlaying, false);
+    assert.equal((await why).reason, "left");
+  }),
+);
+
+test("request-pause on an already-paused room is a no-op (no event storm)", { timeout: TIMEOUT }, () =>
+  withClients(2, async ([host, guest]) => {
+    const id = roomId();
+    await joinRoom(host, id);
+    await joinRoom(guest, id);
+
+    let syncs = 0;
+    host.on("playback:sync", () => {
+      syncs += 1;
+    });
+    guest.emit("playback:request-pause", { reason: "away" });
+    guest.emit("playback:request-pause", { reason: "away" });
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(syncs, 0, "room was never playing, so nothing to pause");
+  }),
+);
+
 test("negative seek positions are clamped to 0 server-side", { timeout: TIMEOUT }, () =>
   withClients(2, async ([host, guest]) => {
     const id = roomId();

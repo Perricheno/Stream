@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import type { Server } from "socket.io";
 import {
   CHAT_MESSAGE_MAX_LENGTH,
+  computeExpectedPosition,
   type ChatMessage,
   type ClientToServerEvents,
   type JoinRoomResult,
+  type PauseReason,
   type PlaybackActionPayload,
   type QueueItem,
   type ServerToClientEvents,
@@ -32,6 +34,25 @@ type StreamServer = Server<ClientToServerEvents, ServerToClientEvents, Record<st
 
 function hostUserId(room: Room): number | null {
   return room.members.find((m) => m.socketId === room.hostSocketId)?.userId ?? null;
+}
+
+/**
+ * Freezes the room at wherever the shared timeline has actually reached,
+ * using the server's own clock rather than a position sent by a client —
+ * the client asking for this is typically one whose player the OS already
+ * suspended, so its own `currentTime` is stale by however long that took.
+ *
+ * Returns false if the room was already paused (nothing to do, and no event
+ * worth broadcasting).
+ */
+function pauseRoomNow(room: Room): boolean {
+  if (!room.playback.isPlaying) return false;
+  room.playback = {
+    isPlaying: false,
+    positionSeconds: Math.max(0, computeExpectedPosition(room.playback, Date.now())),
+    updatedAtServerTime: Date.now(),
+  };
+  return true;
 }
 
 /**
@@ -98,6 +119,7 @@ export function registerSocketHandlers(io: StreamServer): void {
       const room = getRoom(roomId);
       if (room) {
         const wasHost = room.hostSocketId === socket.id;
+        const name = room.members.find((m) => m.socketId === socket.id)?.firstName ?? socket.data.user.firstName;
         removeMember(room, socket.id);
         const newHost = hostUserId(room);
         logRoom("member:left", {
@@ -109,6 +131,14 @@ export function registerSocketHandlers(io: StreamServer): void {
           remaining: room.members.length,
         });
         socket.to(roomId).emit("room:participants", toParticipants(room));
+
+        // Somebody stopped watching — freeze the shared timeline rather than
+        // letting it run on without them. Whoever's left resumes when ready.
+        if (room.members.length > 0 && pauseRoomNow(room)) {
+          logRoom("playback:paused", { room: roomId, byUserId: uid, reason: "left", at: room.playback.positionSeconds });
+          io.to(roomId).emit("playback:sync", { ...room.playback, originUserId: uid });
+          io.to(roomId).emit("playback:paused-by", { userId: uid, userName: name, reason: "left" });
+        }
       }
       socket.leave(roomId);
       currentRoomId = null;
@@ -159,6 +189,31 @@ export function registerSocketHandlers(io: StreamServer): void {
     socket.on("playback:play", (payload) => applyPlayback("play", true, payload));
     socket.on("playback:pause", (payload) => applyPlayback("pause", false, payload));
     socket.on("playback:seek", (payload) => applyPlayback("seek", undefined, payload));
+
+    // Pausing is deliberately open to every participant, unlike play/seek:
+    // the point of watching together is that nobody's timeline runs on while
+    // somebody isn't actually watching (app backgrounded, screen locked). The
+    // position comes from the server's own clock — see pauseRoomNow.
+    socket.on("playback:request-pause", ({ reason }) => {
+      if (!currentRoomId) return;
+      const room = getRoom(currentRoomId);
+      if (!room) return;
+
+      const safeReason: PauseReason = reason === "away" || reason === "left" ? reason : "manual";
+      if (!pauseRoomNow(room)) return;
+
+      const name = room.members.find((m) => m.socketId === socket.id)?.firstName ?? socket.data.user.firstName;
+      logRoom("playback:paused", {
+        room: currentRoomId,
+        byUserId: uid,
+        reason: safeReason,
+        at: room.playback.positionSeconds,
+      });
+      // io.to (not socket.to): the sender's own player must converge on the
+      // server-chosen position too — theirs was suspended and is behind.
+      io.to(currentRoomId).emit("playback:sync", { ...room.playback, originUserId: uid });
+      io.to(currentRoomId).emit("playback:paused-by", { userId: uid, userName: name, reason: safeReason });
+    });
 
     socket.on("playback:change-source", ({ source }) => {
       if (!currentRoomId) return;

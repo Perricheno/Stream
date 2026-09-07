@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef } from "react";
 import { computeExpectedPosition, ECHO_SUPPRESSION_MS } from "@stream/shared";
 import type { PlaybackState, PlaybackSyncPayload } from "@stream/shared";
 import type { RoomSocket } from "../socket/socketClient";
-import { isRealTelegramClient } from "../telegram/environment";
 import type { PlayerHandle } from "./playerTypes";
 import { syncLog } from "./syncLog";
 import { useServerClock } from "./useServerClock";
@@ -298,42 +297,47 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
     }
   }, [stopSoftCorrection, serverNow]);
 
-  // A real Telegram client commonly gets a backgrounded WebView's video
-  // auto-paused by the OS itself — not a user action — and for the host
-  // specifically, reporting that as a genuine pause would stop the room for
-  // every other participant just because the host's app went to the
-  // background. Suppress the whole time it's hidden; coming back to the
-  // foreground restores whatever suppression window was already in effect
-  // (rather than clearing it outright), so this can't cut a genuinely
-  // in-progress cold-start window short if backgrounding happens to overlap
-  // with one.
-  //
-  // A plain browser tab (running this as a standalone website, or `pnpm dev`)
-  // is different: an already-playing, user-started video keeps advancing
-  // (with audio) in a backgrounded tab — that's the browser's own autoplay
-  // policy, not something to fight — so drift correction stays active there
-  // instead of silently going stale for however long the tab stays hidden;
-  // coming back just forces one immediate resync (rather than waiting up to
-  // PERIODIC_RECHECK_MS) in case a throttled background timer let it drift.
+  /**
+   * Going away pauses the room for everyone.
+   *
+   * This used to do the opposite: a backgrounded WebView gets its video
+   * auto-paused by the OS, and that was deliberately hidden from the room so
+   * one person's app switch wouldn't stop the others. That's the wrong
+   * trade for watching together — the shared timeline kept advancing while
+   * somebody genuinely couldn't see it (Telegram's WebView has no
+   * Picture-in-Picture to fall back on), so they came back to a video that
+   * had run on without them and got snapped forward past what they missed.
+   *
+   * Pausing is open to any participant for exactly this reason (see
+   * playback:request-pause). The server picks the position from its own
+   * clock, since this player is already suspended and its currentTime is
+   * behind. Suppression still covers the player's own OS-induced pause event
+   * so it doesn't race a second, staler pause into the room; coming back
+   * restores whatever window was in effect and forces one resync.
+   *
+   * The exception is real Picture-in-Picture (a browser, not the Telegram
+   * WebView): the page is hidden but the video is visibly floating, so they
+   * are still watching and nothing should stop.
+   */
   useEffect(() => {
     const onVisibilityChange = () => {
-      if (!isRealTelegramClient()) {
-        if (document.visibilityState === "visible") {
-          const state = lastKnownStateRef.current;
-          if (state) applyServerState(state, true);
+      if (document.visibilityState === "hidden") {
+        if (document.pictureInPictureElement) return;
+        preBackgroundSuppressedRef.current = suppressed.current;
+        suppressed.current = Infinity;
+        if (lastKnownStateRef.current?.isPlaying) {
+          syncLog("away:request-pause");
+          socket.emit("playback:request-pause", { reason: "away" });
         }
         return;
       }
-      if (document.visibilityState === "hidden") {
-        preBackgroundSuppressedRef.current = suppressed.current;
-        suppressed.current = Infinity;
-      } else {
-        suppressed.current = preBackgroundSuppressedRef.current;
-      }
+      suppressed.current = preBackgroundSuppressedRef.current;
+      const state = lastKnownStateRef.current;
+      if (state) applyServerState(state, true);
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [applyServerState]);
+  }, [applyServerState, socket]);
 
   useEffect(() => {
     const handleSync = (payload: PlaybackSyncPayload) => applyServerState(payload);

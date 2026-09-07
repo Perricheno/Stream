@@ -82,6 +82,8 @@ const ru = {
   linkNotRecognized: "Не получилось распознать ссылку",
   linkPickerFooter:
     "Ссылка на YouTube/Vimeo, прямая ссылка на видео (mp4/HLS) — или ссылка на страницу с видео либо Google Drive: скачаем и синхронизируем сами",
+  pausedByAway: "{name} свернул приложение — поставили на паузу",
+  pausedByLeft: "{name} вышел — поставили на паузу",
   libraryDownloading: "Скачиваем видео… {percent}%",
   libraryPreparing: "Готовим видео…",
   libraryFailed: "Не удалось загрузить это видео",
@@ -188,6 +190,8 @@ const en: Record<keyof typeof ru, string> = {
   linkNotRecognized: "Couldn't recognize that link",
   linkPickerFooter:
     "A YouTube/Vimeo link, a direct video link (mp4/HLS) — or a link to a page with a video or a Google Drive file: we'll download and sync it",
+  pausedByAway: "{name} switched away — paused",
+  pausedByLeft: "{name} left — paused",
   libraryDownloading: "Downloading video… {percent}%",
   libraryPreparing: "Preparing video…",
   libraryFailed: "Couldn't load this video",

@@ -30,12 +30,22 @@ export interface PlaybackActionPayload {
   clientTimestamp: number;
 }
 
+/** Why the room was paused by someone other than a deliberate tap on pause. */
+export type PauseReason = "away" | "left" | "manual";
+
 export interface ClientToServerEvents {
   "room:join": (payload: JoinRoomPayload, cb: (res: JoinRoomResult) => void) => void;
   "room:leave": () => void;
   "playback:play": (payload: PlaybackActionPayload) => void;
   "playback:pause": (payload: PlaybackActionPayload) => void;
   "playback:seek": (payload: PlaybackActionPayload) => void;
+  /** Pausing is the one playback action ANY participant may take, unlike
+   *  play/seek (host-only). Sent when someone stops being able to watch —
+   *  they backgrounded the app, locked the screen, or left the room — so the
+   *  shared timeline doesn't run on without them. The server picks the
+   *  position itself (from its own clock) rather than trusting the sender's,
+   *  whose player may already have been suspended by the OS. */
+  "playback:request-pause": (payload: { reason: PauseReason }) => void;
   "playback:change-source": (payload: { source: VideoSource }) => void;
   "chat:send": (payload: { text: string; replyTo?: ChatReplyPreview }) => void;
   /** Only the author's own client may edit/delete — the server ignores
@@ -73,6 +83,10 @@ export interface ServerToClientEvents {
   "chat:message-updated": (message: ChatMessage) => void;
   "chat:message-deleted": (payload: { id: string }) => void;
   "sync:status": (payload: { userId: number; driftSeconds: number; isBuffering: boolean; updatedAt: number }) => void;
+  /** Sent alongside the playback:sync that actually paused, so the UI can
+   *  explain WHY it stopped ("Аня свернула приложение") instead of the video
+   *  just halting for no visible reason. */
+  "playback:paused-by": (payload: { userId: number; userName: string; reason: PauseReason }) => void;
   "room:error": (payload: { code: string; message: string }) => void;
   /** Sent only to the removed participant. */
   "room:kicked": () => void;

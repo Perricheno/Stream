@@ -154,6 +154,20 @@ export function RoomScreen({ roomId, onExit, initialVideoId }: RoomScreenProps) 
     if (chatSidebarOpen) setChatUnreadCount(0);
   }, [chatSidebarOpen]);
 
+  // Somebody else's app went to the background, or they left — the room was
+  // paused for everyone (see playback:request-pause). Say so, otherwise the
+  // video just stops with no explanation.
+  useEffect(() => {
+    const onPausedBy = ({ userId, userName, reason }: { userId: number; userName: string; reason: string }) => {
+      if (userId === yourUserId) return;
+      setHostToast(t(reason === "left" ? "pausedByLeft" : "pausedByAway").replace("{name}", userName));
+    };
+    socket.on("playback:paused-by", onPausedBy);
+    return () => {
+      socket.off("playback:paused-by", onPausedBy);
+    };
+  }, [yourUserId, t]);
+
   const handleBack = useCallback(async () => {
     const confirmed = await confirmAction(
       t("leaveRoomDescription"),
