@@ -7,6 +7,7 @@ import {
   type QueueItem,
   type RoomStatePayload,
 } from "@stream/shared";
+import { logRoom } from "../observability/log";
 import type { Room, RoomMember } from "./roomTypes";
 
 /** In-memory only — rooms are ephemeral and reset on server restart (see README). */
@@ -116,11 +117,21 @@ export function removeMember(room: Room, socketId: string): void {
   room.members = room.members.filter((member) => member.socketId !== socketId);
   if (room.hostSocketId === socketId) {
     room.hostSocketId = room.members[0]?.socketId ?? "";
+    const promoted = room.members.find((m) => m.socketId === room.hostSocketId);
+    logRoom("host:promoted", { room: room.id, newHostUserId: promoted?.userId ?? null, playback: room.playback });
   }
   if (room.members.length === 0 && !room.emptyTimer) {
+    logRoom("room:empty", { room: room.id, graceMs: ROOM_EMPTY_GRACE_MS });
     room.emptyTimer = setTimeout(() => {
-      if (room.members.length === 0) rooms.delete(room.id);
+      if (room.members.length === 0) {
+        rooms.delete(room.id);
+        logRoom("room:deleted", { room: room.id });
+      }
     }, ROOM_EMPTY_GRACE_MS);
+    // A pending teardown timer shouldn't be a reason for the process to stay
+    // alive on its own (it isn't, in prod — the socket listener is — but this
+    // keeps test processes from hanging on the 10-minute delay).
+    room.emptyTimer.unref?.();
   }
 }
 

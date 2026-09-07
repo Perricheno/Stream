@@ -4,7 +4,10 @@ import type { PlaybackState, PlaybackSyncPayload } from "@stream/shared";
 import type { RoomSocket } from "../socket/socketClient";
 import { isRealTelegramClient } from "../telegram/environment";
 import type { PlayerHandle } from "./playerTypes";
+import { syncLog } from "./syncLog";
 import { useServerClock } from "./useServerClock";
+
+const round = (n: number) => Math.round(n * 1000) / 1000;
 
 export interface SyncedPlayback {
   playerRef: React.RefObject<PlayerHandle>;
@@ -138,10 +141,17 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
 
   const onBuffering = useCallback(
     (isBuffering: boolean) => {
+      if (isBufferingRef.current !== isBuffering) {
+        syncLog("buffering", { isBuffering, at: round(playerRef.current?.getCurrentTime() ?? 0) });
+      }
       isBufferingRef.current = isBuffering;
       // A rate nudge assumes normal playback is progressing — pointless (and
       // visually confusing) to leave one running once the player itself has
-      // stopped consuming time due to a stall.
+      // stopped consuming time due to a stall. Drift correction stays
+      // suppressed the whole time isBufferingRef is true (see the guard in
+      // applyServerState and the soft-correction interval); the periodic
+      // recheck (PERIODIC_RECHECK_MS) closes the gap the stall opened within
+      // ~1s of data coming back.
       if (isBuffering) stopSoftCorrection();
     },
     [stopSoftCorrection],
@@ -150,8 +160,14 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
   const applyServerState = useCallback((payload: PlaybackState, forceSeek = false) => {
     lastKnownStateRef.current = payload;
     const player = playerRef.current;
-    if (!player) return;
-    if (Date.now() - lastLocalActionAt.current < ECHO_SUPPRESSION_MS) return;
+    if (!player) {
+      syncLog("apply:skip", { reason: "no-player", forceSeek });
+      return;
+    }
+    if (Date.now() - lastLocalActionAt.current < ECHO_SUPPRESSION_MS) {
+      syncLog("apply:skip", { reason: "echo-suppressed", sinceLocalMs: Date.now() - lastLocalActionAt.current });
+      return;
+    }
 
     stopSoftCorrection();
 
@@ -170,6 +186,10 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
     // position, risking a stall-seek-stall loop instead of letting the
     // browser recover on its own. play()/pause() below still always reflect
     // the real command regardless — only the drift-closing part backs off.
+    if (isBufferingRef.current || !hasLoaded) {
+      syncLog("apply:defer-correction", { buffering: isBufferingRef.current, hasLoaded });
+    }
+
     if (!isBufferingRef.current && hasLoaded) {
       // Clamp to the video's real length: the shared timeline keeps advancing
       // `positionSeconds` from a server timestamp with no knowledge of
@@ -180,18 +200,31 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
       const rawExpected = computeExpectedPosition(payload, serverNow());
       const expected = duration > 0 ? Math.min(rawExpected, duration) : rawExpected;
       const atEnd = duration > 0 && rawExpected >= duration - 0.25;
-      const drift = player.getCurrentTime() - expected;
+      const current = player.getCurrentTime();
+      const drift = current - expected;
       const absDrift = Math.abs(drift);
+      syncLog("apply:drift", {
+        isPlaying: payload.isPlaying,
+        current: round(current),
+        expected: round(expected),
+        rawExpected: round(rawExpected),
+        duration: round(duration),
+        drift: round(drift),
+        forceSeek,
+        atEnd,
+      });
 
       // The room thinks it's still playing but the video has run out — don't
       // fight the ended player with seeks/rate nudges; just let it sit.
       if (atEnd) {
+        syncLog("apply:at-end", { current: round(current), duration: round(duration) });
         stopSoftCorrection();
         lastCommandedPlayingRef.current = false;
         return;
       }
 
       if (forceSeek || absDrift > SOFT_CORRECTION_MAX_SECONDS) {
+        syncLog("correct:seek", { from: round(current), to: round(expected), reason: forceSeek ? "force" : "far-drift" });
         // Too far off for a rate nudge to close in reasonable time — jump.
         // Also always true for the very first sync a freshly-mounted player
         // gets (join, or switching videos): there's no continuous playback
@@ -211,7 +244,9 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
         const rateDelta = player.supportsFinePlaybackRate()
           ? correctionRateDelta(absDrift)
           : COARSE_CORRECTION_RATE_DELTA;
-        player.setPlaybackRate(drift < 0 ? 1 + rateDelta : 1 - rateDelta);
+        const rate = drift < 0 ? 1 + rateDelta : 1 - rateDelta;
+        syncLog("correct:rate", { drift: round(drift), rate: round(rate) });
+        player.setPlaybackRate(rate);
         correctionInterval.current = setInterval(() => {
           if (isBufferingRef.current) return;
           const current = playerRef.current;
@@ -236,6 +271,7 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
       const isFirstCommand = lastCommandedPlayingRef.current === null;
       lastCommandedPlayingRef.current = payload.isPlaying;
       const window = hasLoaded ? STEADY_STATE_SUPPRESSION_MS : COLD_START_SUPPRESSION_MS;
+      syncLog("command", { to: payload.isPlaying ? "play" : "pause", hasLoaded, isFirstCommand });
       if (payload.isPlaying) {
         suppressed.current = Date.now() + window;
         player.play();
@@ -313,6 +349,7 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
     const tryApply = () => {
       if (cancelled) return;
       if (playerRef.current?.isReady()) {
+        syncLog("initial-sync", { after: attempts, state: lastKnownStateRef.current });
         // lastKnownStateRef.current, not the closure-captured initialPlayback
         // — the retry loop below can take up to INITIAL_SYNC_MAX_ATTEMPTS *
         // INITIAL_SYNC_RETRY_MS (~10s) to actually fire, and a host's own
@@ -381,6 +418,7 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
       // isn't coming.
       const isPlaying = type === "seek" ? (lastKnownStateRef.current?.isPlaying ?? true) : type === "play";
       lastKnownStateRef.current = { isPlaying, positionSeconds: atSeconds, updatedAtServerTime: serverNow() };
+      syncLog("local", { type, atSeconds: round(atSeconds), isPlaying });
       socket.emit(`playback:${type}`, { atSeconds, clientTimestamp: Date.now() });
     },
     [socket, stopSoftCorrection, serverNow],
@@ -403,6 +441,7 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
       // Cold-start window — this is always a fresh, not-yet-loaded player by
       // definition (see this function's own doc comment).
       suppressed.current = Date.now() + COLD_START_SUPPRESSION_MS;
+      syncLog("startPlaybackNow", { atSeconds: round(atSeconds) });
       player.play();
       emit("play", atSeconds);
     },

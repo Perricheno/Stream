@@ -8,9 +8,11 @@
   "scripts": {
     "dev": "pnpm --parallel --filter=./apps/* run dev",
     "build": "pnpm -r run build",
-    "lint": "pnpm -r run lint"
+    "lint": "pnpm -r run lint",
+    "test": "tsx --test \"apps/server/src/**/*.test.ts\" \"apps/web/src/**/*.test.ts\" \"packages/shared/src/**/*.test.ts\""
   },
   "devDependencies": {
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "tsx": "^4.19.2"
   }
 }

@@ -24,10 +24,15 @@ import {
   toStatePayload,
 } from "../rooms/RoomStore";
 import { getProfile } from "../db/userRepository";
-import type { RoomMember } from "../rooms/roomTypes";
+import { logRoom } from "../observability/log";
+import type { Room, RoomMember } from "../rooms/roomTypes";
 import type { SocketData } from "./types";
 
 type StreamServer = Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
+
+function hostUserId(room: Room): number | null {
+  return room.members.find((m) => m.socketId === room.hostSocketId)?.userId ?? null;
+}
 
 /**
  * Host-authoritative playback sync: the room's `playback` (position + isPlaying
@@ -50,27 +55,59 @@ type StreamServer = Server<ClientToServerEvents, ServerToClientEvents, Record<st
 export function registerSocketHandlers(io: StreamServer): void {
   io.on("connection", (socket) => {
     let currentRoomId: string | null = null;
+    const uid = socket.data.user.id;
 
-    function applyPlayback(isPlaying: boolean | undefined, payload: PlaybackActionPayload) {
+    function applyPlayback(kind: "play" | "pause" | "seek", isPlaying: boolean | undefined, payload: PlaybackActionPayload) {
       if (!currentRoomId) return;
       const room = getRoom(currentRoomId);
-      if (!room || room.hostSocketId !== socket.id) return;
+      if (!room) return;
 
+      const isHost = room.hostSocketId === socket.id;
+      if (!isHost) {
+        // Not an error — a non-host's own player pausing itself (buffering,
+        // backgrounding) fires this; it just must not move the shared state.
+        logRoom("playback:rejected-not-host", { room: currentRoomId, userId: uid, kind, atSeconds: payload.atSeconds });
+        return;
+      }
+
+      // Clamp: a buggy/hostile client shouldn't be able to park the room's
+      // timeline at 1e9 seconds. The upper bound is the client's job (it
+      // knows the duration); this just refuses the obviously-absurd.
+      const atSeconds = Math.max(0, Number.isFinite(payload.atSeconds) ? payload.atSeconds : 0);
       room.playback = {
         isPlaying: isPlaying ?? room.playback.isPlaying,
-        positionSeconds: payload.atSeconds,
+        positionSeconds: atSeconds,
         updatedAtServerTime: Date.now(),
       };
 
-      socket.to(currentRoomId).emit("playback:sync", { ...room.playback, originUserId: socket.data.user.id });
+      logRoom("playback:set", {
+        room: currentRoomId,
+        byUserId: uid,
+        kind,
+        isPlaying: room.playback.isPlaying,
+        positionSeconds: atSeconds,
+        updatedAtServerTime: room.playback.updatedAtServerTime,
+      });
+
+      socket.to(currentRoomId).emit("playback:sync", { ...room.playback, originUserId: uid });
     }
 
-    function leaveCurrentRoom() {
+    function leaveCurrentRoom(reason: "leave" | "disconnect") {
       if (!currentRoomId) return;
       const roomId = currentRoomId;
       const room = getRoom(roomId);
       if (room) {
+        const wasHost = room.hostSocketId === socket.id;
         removeMember(room, socket.id);
+        const newHost = hostUserId(room);
+        logRoom("member:left", {
+          room: roomId,
+          userId: uid,
+          reason,
+          wasHost,
+          newHostUserId: wasHost ? newHost : undefined,
+          remaining: room.members.length,
+        });
         socket.to(roomId).emit("room:participants", toParticipants(room));
       }
       socket.leave(roomId);
@@ -85,14 +122,15 @@ export function registerSocketHandlers(io: StreamServer): void {
         return;
       }
 
+      const existed = getRoom(roomId) !== undefined;
       const room = getOrCreateRoom(roomId);
-      const profile = getProfile(socket.data.user.id);
+      const profile = getProfile(uid);
       const hideProfile = profile?.hideProfile ?? false;
       const member: RoomMember = hideProfile
-        ? { socketId: socket.id, userId: socket.data.user.id, firstName: "Аноним" }
+        ? { socketId: socket.id, userId: uid, firstName: "Аноним" }
         : {
             socketId: socket.id,
-            userId: socket.data.user.id,
+            userId: uid,
             firstName: profile?.displayName?.trim() || socket.data.user.firstName,
             photoUrl: socket.data.user.photoUrl,
           };
@@ -100,16 +138,27 @@ export function registerSocketHandlers(io: StreamServer): void {
       socket.join(roomId);
       currentRoomId = roomId;
 
-      const result: JoinRoomResult = { ok: true, state: toStatePayload(room), yourUserId: socket.data.user.id };
+      const result: JoinRoomResult = { ok: true, state: toStatePayload(room), yourUserId: uid };
       callback(result);
       socket.to(roomId).emit("room:participants", toParticipants(room));
+
+      logRoom("member:joined", {
+        room: roomId,
+        userId: uid,
+        createdRoom: !existed,
+        isHost: room.hostSocketId === socket.id,
+        hostUserId: hostUserId(room),
+        participants: room.members.length,
+        playback: room.playback,
+        hasSource: room.source !== null,
+      });
     });
 
-    socket.on("room:leave", leaveCurrentRoom);
+    socket.on("room:leave", () => leaveCurrentRoom("leave"));
 
-    socket.on("playback:play", (payload) => applyPlayback(true, payload));
-    socket.on("playback:pause", (payload) => applyPlayback(false, payload));
-    socket.on("playback:seek", (payload) => applyPlayback(undefined, payload));
+    socket.on("playback:play", (payload) => applyPlayback("play", true, payload));
+    socket.on("playback:pause", (payload) => applyPlayback("pause", false, payload));
+    socket.on("playback:seek", (payload) => applyPlayback("seek", undefined, payload));
 
     socket.on("playback:change-source", ({ source }) => {
       if (!currentRoomId) return;
@@ -118,6 +167,7 @@ export function registerSocketHandlers(io: StreamServer): void {
 
       room.source = source;
       room.playback = { isPlaying: false, positionSeconds: 0, updatedAtServerTime: Date.now() };
+      logRoom("source:changed", { room: currentRoomId, byUserId: uid, sourceType: source.type });
       io.to(currentRoomId).emit("playback:source-changed", { source });
     });
 
@@ -131,7 +181,7 @@ export function registerSocketHandlers(io: StreamServer): void {
       const member = room.members.find((m) => m.socketId === socket.id);
       const message: ChatMessage = {
         id: randomUUID(),
-        fromUserId: socket.data.user.id,
+        fromUserId: uid,
         fromName: member?.firstName ?? socket.data.user.firstName,
         text: trimmed,
         sentAt: Date.now(),
@@ -148,7 +198,7 @@ export function registerSocketHandlers(io: StreamServer): void {
       const room = getRoom(currentRoomId);
       if (!room) return;
       const existing = room.messages.find((m) => m.id === id);
-      if (!existing || existing.fromUserId !== socket.data.user.id) return; // only the author may edit
+      if (!existing || existing.fromUserId !== uid) return; // only the author may edit
 
       const updated = editChatMessage(room, id, trimmed);
       if (updated) io.to(currentRoomId).emit("chat:message-updated", updated);
@@ -159,7 +209,7 @@ export function registerSocketHandlers(io: StreamServer): void {
       const room = getRoom(currentRoomId);
       if (!room) return;
       const existing = room.messages.find((m) => m.id === id);
-      if (!existing || existing.fromUserId !== socket.data.user.id) return; // only the author may delete
+      if (!existing || existing.fromUserId !== uid) return; // only the author may delete
 
       if (deleteChatMessage(room, id)) io.to(currentRoomId).emit("chat:message-deleted", { id });
     });
@@ -173,10 +223,11 @@ export function registerSocketHandlers(io: StreamServer): void {
       const item: QueueItem = {
         id: randomUUID(),
         source,
-        addedByUserId: socket.data.user.id,
+        addedByUserId: uid,
         addedByName: member?.firstName ?? socket.data.user.firstName,
       };
       if (!addQueueItem(room, item)) return;
+      logRoom("queue:add", { room: currentRoomId, byUserId: uid, sourceType: source.type, queueLength: room.queue.length });
       io.to(currentRoomId).emit("queue:updated", { queue: room.queue });
     });
 
@@ -194,7 +245,11 @@ export function registerSocketHandlers(io: StreamServer): void {
       const room = getRoom(currentRoomId);
       if (!room || room.hostSocketId !== socket.id) return; // host-only, avoids a double-pop race
 
-      if (!advanceQueue(room)) return;
+      if (!advanceQueue(room)) {
+        logRoom("queue:advance-empty", { room: currentRoomId, byUserId: uid });
+        return;
+      }
+      logRoom("queue:advance", { room: currentRoomId, byUserId: uid, sourceType: room.source!.type, queueLength: room.queue.length });
       io.to(currentRoomId).emit("playback:source-changed", { source: room.source! });
       io.to(currentRoomId).emit("queue:updated", { queue: room.queue });
     });
@@ -208,6 +263,7 @@ export function registerSocketHandlers(io: StreamServer): void {
       if (!target || target.socketId === socket.id) return;
 
       removeMember(room, target.socketId);
+      logRoom("member:kicked", { room: currentRoomId, byUserId: uid, targetUserId });
       io.to(target.socketId).emit("room:kicked");
       io.sockets.sockets.get(target.socketId)?.leave(currentRoomId);
       io.to(currentRoomId).emit("room:participants", toParticipants(room));
@@ -217,18 +273,27 @@ export function registerSocketHandlers(io: StreamServer): void {
 
     socket.on("sync:report", ({ driftSeconds, isBuffering }) => {
       if (!currentRoomId) return;
+      // Logged for every client every ~1s — low volume, and it's the only
+      // server-side window into how far each viewer actually is from the
+      // shared timeline (their console `[sync]` log has the rest).
+      logRoom("sync:report", {
+        room: currentRoomId,
+        userId: uid,
+        driftSeconds: Math.round(driftSeconds * 1000) / 1000,
+        isBuffering,
+      });
       // Includes the sender too (not socket.to) — this is diagnostic-only,
       // so there's no echo-jitter concern like with playback actions, and
       // it's simplest for every client (including the reporter) to read
       // everyone's health the same way.
       io.to(currentRoomId).emit("sync:status", {
-        userId: socket.data.user.id,
+        userId: uid,
         driftSeconds,
         isBuffering,
         updatedAt: Date.now(),
       });
     });
 
-    socket.on("disconnect", leaveCurrentRoom);
+    socket.on("disconnect", () => leaveCurrentRoom("disconnect"));
   });
 }

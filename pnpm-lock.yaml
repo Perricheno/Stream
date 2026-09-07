@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.1
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
@@ -51,6 +54,9 @@ importers:
       '@types/node':
         specifier: ^24.13.2
         version: 24.13.3
+      socket.io-client:
+        specifier: ^4.8.1
+        version: 4.8.3
       tsx:
         specifier: ^4.19.2
         version: 4.23.1
