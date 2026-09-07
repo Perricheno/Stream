@@ -13,7 +13,10 @@ declare global {
     Telegram?: {
       Login: {
         auth(
-          options: { client_id: string; request_access?: boolean; lang?: string },
+          // The Telegram Login library documents client_id / scope / lang /
+          // nonce. `request_access` is from the older widget API — the
+          // library reads it only as a fallback and it isn't needed here.
+          options: { client_id: string; scope?: string[]; lang?: string; nonce?: string },
           callback: (data: TelegramLoginAuthData | false) => void,
         ): void;
       };
@@ -68,7 +71,7 @@ export function useTelegramLoginWidget() {
       .then(
         () =>
           new Promise<string>((resolve, reject) => {
-            window.Telegram!.Login.auth({ client_id: BOT_ID, request_access: false }, (data) => {
+            window.Telegram!.Login.auth({ client_id: BOT_ID, scope: ["profile"] }, (data) => {
               if (!data || !data.id_token) {
                 reject(new Error("login cancelled or failed"));
                 return;
