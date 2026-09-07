@@ -6,7 +6,7 @@ import styles from "./VideoPlayer.module.css";
 
 interface Html5PlayerAdapterProps extends PlayerAdapterEvents {
   source: Extract<VideoSource, { type: "file" }>;
-  suppressed: React.MutableRefObject<boolean>;
+  suppressed: React.MutableRefObject<number>;
 }
 
 export const Html5PlayerAdapter = forwardRef<PlayerHandle, Html5PlayerAdapterProps>(

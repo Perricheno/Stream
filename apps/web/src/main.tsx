@@ -5,6 +5,7 @@ import "./styles/global.css";
 import { bootstrapTelegram } from "./telegram/init";
 import { captureRawInitData } from "./telegram/rawInitData";
 import { applyPerformanceClassMotionPreference } from "./telegram/detectPerformanceClass";
+import { registerAdblock } from "./adblock/registerAdblock";
 import { App } from "./App";
 
 // A documented issue on some real Telegram clients (missing Object.hasOwn on
@@ -20,6 +21,7 @@ if (!Object.hasOwn) {
 captureRawInitData();
 applyPerformanceClassMotionPreference();
 bootstrapTelegram();
+registerAdblock();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { computeExpectedPosition, ECHO_SUPPRESSION_MS } from "@stream/shared";
 import type { PlaybackState, PlaybackSyncPayload } from "@stream/shared";
 import type { RoomSocket } from "../socket/socketClient";
+import { isRealTelegramClient } from "../telegram/environment";
 import type { PlayerHandle } from "./playerTypes";
 import { useServerClock } from "./useServerClock";
 
@@ -125,27 +126,6 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
   const preBackgroundSuppressedRef = useRef(0);
   const { serverNow } = useServerClock(socket);
 
-  // A backgrounded app commonly gets its video auto-paused by the OS/browser
-  // itself — not a user action — and for the host specifically, reporting
-  // that as a genuine pause would stop the room for every other participant
-  // just because the host's app went to the background. Suppress the whole
-  // time it's hidden; coming back to the foreground restores whatever
-  // suppression window was already in effect (rather than clearing it
-  // outright), so this can't cut a genuinely in-progress cold-start window
-  // short if backgrounding happens to overlap with one.
-  useEffect(() => {
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        preBackgroundSuppressedRef.current = suppressed.current;
-        suppressed.current = Infinity;
-      } else {
-        suppressed.current = preBackgroundSuppressedRef.current;
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, []);
-
   const stopSoftCorrection = useCallback(() => {
     if (correctionInterval.current) {
       clearInterval(correctionInterval.current);
@@ -257,6 +237,43 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
       }
     }
   }, [stopSoftCorrection, serverNow]);
+
+  // A real Telegram client commonly gets a backgrounded WebView's video
+  // auto-paused by the OS itself — not a user action — and for the host
+  // specifically, reporting that as a genuine pause would stop the room for
+  // every other participant just because the host's app went to the
+  // background. Suppress the whole time it's hidden; coming back to the
+  // foreground restores whatever suppression window was already in effect
+  // (rather than clearing it outright), so this can't cut a genuinely
+  // in-progress cold-start window short if backgrounding happens to overlap
+  // with one.
+  //
+  // A plain browser tab (running this as a standalone website, or `pnpm dev`)
+  // is different: an already-playing, user-started video keeps advancing
+  // (with audio) in a backgrounded tab — that's the browser's own autoplay
+  // policy, not something to fight — so drift correction stays active there
+  // instead of silently going stale for however long the tab stays hidden;
+  // coming back just forces one immediate resync (rather than waiting up to
+  // PERIODIC_RECHECK_MS) in case a throttled background timer let it drift.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (!isRealTelegramClient()) {
+        if (document.visibilityState === "visible") {
+          const state = lastKnownStateRef.current;
+          if (state) applyServerState(state, true);
+        }
+        return;
+      }
+      if (document.visibilityState === "hidden") {
+        preBackgroundSuppressedRef.current = suppressed.current;
+        suppressed.current = Infinity;
+      } else {
+        suppressed.current = preBackgroundSuppressedRef.current;
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [applyServerState]);
 
   useEffect(() => {
     const handleSync = (payload: PlaybackSyncPayload) => applyServerState(payload);

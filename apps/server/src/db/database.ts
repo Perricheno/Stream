@@ -33,4 +33,27 @@ db.exec(`
   -- "WHERE user_a = ? OR user_b = ?" (see friendRepository.ts) — this covers
   -- the user_b side so both directions of a friend lookup stay indexed.
   CREATE INDEX IF NOT EXISTS idx_friendships_user_b ON friendships(user_b);
+
+  -- Downloaded / imported videos, one row per import job. A row is created
+  -- immediately with status='downloading' and progressed in place by the
+  -- download subsystem (see apps/server/src/video/download) until it lands
+  -- on status='ready' (file_path populated) or 'failed' (error_message set).
+  CREATE TABLE IF NOT EXISTS videos (
+    id TEXT PRIMARY KEY,
+    added_by_user_id INTEGER NOT NULL,
+    source_type TEXT NOT NULL,        -- 'youtube' | 'gdrive' | 'telegram_upload' | 'direct_url'
+    source_url TEXT,
+    title TEXT NOT NULL DEFAULT '',
+    file_path TEXT,
+    thumbnail_path TEXT,
+    duration_seconds INTEGER,
+    status TEXT NOT NULL DEFAULT 'downloading', -- 'downloading' | 'ready' | 'failed'
+    progress_percent INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status);
+  CREATE INDEX IF NOT EXISTS idx_videos_added_by ON videos(added_by_user_id);
 `);

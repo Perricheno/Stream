@@ -1,5 +1,6 @@
 import { initData } from "@telegram-apps/sdk-react";
 import { getRawInitData } from "../telegram/rawInitData";
+import { shouldUseTelegramAuth } from "../telegram/environment";
 
 class ApiError extends Error {
   status: number;
@@ -11,9 +12,17 @@ class ApiError extends Error {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const raw = initData.raw() || getRawInitData() || "";
+  // Outside Telegram (and outside local dev's mocked stand-in for it), there
+  // is no real initData to send — the session cookie from Telegram Login
+  // (see auth/TelegramLoginScreen.tsx) carries identity instead, via
+  // `credentials: "include"` below. Sending the dev/mock's fabricated
+  // initData in that case would make the server's initData check fail
+  // outright instead of falling through to that cookie (see
+  // requireTelegramAuth.ts).
+  const raw = shouldUseTelegramAuth() ? initData.raw() || getRawInitData() || "" : "";
   const res = await fetch(`/api${path}`, {
     ...options,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       "X-Init-Data": raw,

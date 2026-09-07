@@ -9,6 +9,7 @@ import {
   themeParams,
   viewport,
 } from "@telegram-apps/sdk-react";
+import { isLocalDevEnvironment } from "./environment";
 
 const DEV_USER = {
   id: 1,
@@ -89,17 +90,25 @@ function buildMockLaunchParamsRaw(): string {
 }
 
 /**
- * Boots the Telegram SDK. Outside a real Telegram client (plain browser dev)
- * this fabricates a launch context first, so every hook below has something
- * to read — see README for how initData validation is bypassed server-side
- * in that case.
+ * Boots the Telegram SDK. On an actual local dev machine (not a real
+ * Telegram client) this fabricates a launch context first, so every hook
+ * below has something to read — see README for how initData validation is
+ * bypassed server-side in that case.
  *
  * Some real Telegram clients omit fields the SDK's launch-params parser
  * treats as required (e.g. `signature`), which makes `init()` throw even
- * though we're genuinely inside Telegram. If that happens we fall back to
- * the mock environment so the UI (theme, buttons, haptics) still works —
- * the socket auth path doesn't depend on this parser anyway, it reads the
- * raw initData straight from the URL (see rawInitData.ts).
+ * though we're genuinely inside Telegram. If that happens too — and we're on
+ * a local dev machine — we fall back to the mock environment so the UI
+ * (theme, buttons, haptics) still works; the socket auth path doesn't depend
+ * on this parser anyway, it reads the raw initData straight from the URL
+ * (see rawInitData.ts), which is already captured before this ever runs.
+ *
+ * A real visitor on the public tunnel who hits either case just renders
+ * without the mock (isLocalDevEnvironment() is false there) — mounting a
+ * fake Telegram identity for them would make shouldUseTelegramAuth() think
+ * they're in Telegram and skip straight to a room connection with fabricated
+ * credentials the server rejects, instead of showing the website's own
+ * Telegram Login screen (see environment.ts).
  *
  * Both branches are wrapped defensively: an uncaught throw here happens
  * before React ever mounts (this runs at the top of main.tsx), so it would
@@ -120,7 +129,7 @@ export function bootstrapTelegram(): void {
     }
   }
 
-  if (!initialized) {
+  if (!initialized && isLocalDevEnvironment()) {
     try {
       installMockBridge(buildMockLaunchParamsRaw());
       initSdk();

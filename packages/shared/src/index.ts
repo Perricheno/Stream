@@ -5,3 +5,6 @@ export * from "./room";
 export * from "./sync";
 export * from "./telegram";
 export * from "./socket-events";
+export * from "./videoSearch";
+export * from "./videoLibrary";
+export * from "./videoUrlPatterns";

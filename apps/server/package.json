@@ -11,12 +11,16 @@
   },
   "dependencies": {
     "@stream/shared": "workspace:*",
+    "cookie": "^2.0.1",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
+    "jose": "^6.2.4",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^24.13.2",

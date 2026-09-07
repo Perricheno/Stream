@@ -59,32 +59,43 @@
   border: 0;
 }
 
-.sourceNote {
-  position: absolute;
-  left: 8px;
-  bottom: 8px;
-  z-index: 2;
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  font-size: 12px;
-  pointer-events: none;
-}
-
-.iframeToggle {
-  position: absolute;
-  right: 8px;
-  top: 8px;
-  z-index: 2;
+/* Placeholder shown in the player's slot while a library video is still
+   importing (or its import failed) — no <video> to render yet. */
+.libraryStatus {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  padding: 16px;
+  text-align: center;
+  color: var(--tgui--hint_color, #8e8e93);
+  font-size: 14px;
+}
+
+/* Shown in the video's normal spot while it's actually floating in a
+   Document Picture-in-Picture window (see useDocumentPictureInPicture.ts) —
+   same slot/aspect-ratio as .container so the room layout doesn't jump. */
+.pipPlaceholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  background: var(--tgui--secondary_bg_color, #1c1c1e);
+  color: var(--tgui--hint_color, #8e8e93);
+  text-align: center;
+  padding: 16px;
+}
+
+.pipReturnButton {
+  padding: 8px 16px;
   border: 0;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
+  border-radius: 10px;
+  background: var(--tgui--button_color, #2ea6ff);
+  color: var(--tgui--button_text_color, #fff);
+  font-size: 14px;
   cursor: pointer;
 }
+

@@ -7,12 +7,15 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cf:typecheck": "tsc -p worker/tsconfig.json",
+    "cf:deploy": "pnpm build && wrangler deploy"
   },
   "dependencies": {
     "@stream/shared": "workspace:*",
     "@telegram-apps/sdk-react": "^2",
     "@telegram-apps/telegram-ui": "^2",
+    "@vimeo/player": "^2.30.4",
     "clsx": "^2.1.1",
     "hls.js": "^1.5.17",
     "lottie-web": "^5.12.2",
@@ -25,6 +28,7 @@
     "youtube-video-element": "^1.9.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260903.1",
     "@types/node": "^24.13.2",
     "@types/pako": "^2.0.3",
     "@types/qrcode": "^1.5.6",
@@ -33,6 +37,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
     "typescript": "~6.0.2",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "wrangler": "^4.40.0"
   }
 }

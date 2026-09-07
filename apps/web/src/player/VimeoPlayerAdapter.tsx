@@ -6,7 +6,7 @@ import styles from "./VideoPlayer.module.css";
 
 interface VimeoPlayerAdapterProps extends PlayerAdapterEvents {
   videoId: string;
-  suppressed: React.MutableRefObject<boolean>;
+  suppressed: React.MutableRefObject<number>;
 }
 
 /** Built on `vimeo-video-element` (Mux's media-elements project), which

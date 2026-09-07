@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState, type KeyboardEvent } from "react";
 import { Button, Cell, IconButton, Input, List, Modal, Placeholder, Section } from "@telegram-apps/telegram-ui";
-import type { QueueItem } from "@stream/shared";
+import type { QueueItem, VideoSource } from "@stream/shared";
 import { useTranslation } from "../../i18n/useTranslation";
 import { StickerPlayer } from "../../stickers/StickerPlayer";
 import { ModalBackdrop } from "../../components/ModalBackdrop";
+import { resolveVideo } from "../../api/videoApi";
 import { parseVideoUrl } from "./parseVideoUrl";
 
 function RemoveIcon() {
@@ -14,8 +15,17 @@ function RemoveIcon() {
   );
 }
 
-function describeSource(item: QueueItem): string {
-  return item.source.type === "youtube" ? `youtu.be/${item.source.videoId}` : item.source.url;
+function describeSource(source: VideoSource): string {
+  switch (source.type) {
+    case "youtube":
+      return `youtu.be/${source.videoId}`;
+    case "vimeo":
+      return `vimeo.com/${source.videoId}`;
+    case "file":
+      return source.url;
+    case "library":
+      return source.title ?? source.videoId;
+  }
 }
 
 interface QueuePanelProps {
@@ -23,21 +33,46 @@ interface QueuePanelProps {
   onOpenChange: (open: boolean) => void;
   queue: QueueItem[];
   isHost: boolean;
-  onAdd: (raw: string) => void;
+  onAdd: (source: VideoSource) => void;
   onRemove: (itemId: string) => void;
 }
 
 export function QueuePanel({ open, onOpenChange, queue, isHost, onAdd, onRemove }: QueuePanelProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState("");
-  const parsed = useMemo(() => parseVideoUrl(value), [value]);
-  const isInvalid = value.trim().length > 0 && !parsed;
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const submit = useCallback(() => {
-    if (!parsed) return;
-    onAdd(value);
-    setValue("");
-  }, [parsed, value, onAdd]);
+  const submit = useCallback(async () => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    setError(null);
+
+    const fastParsed = parseVideoUrl(trimmed);
+    if (fastParsed) {
+      onAdd(fastParsed);
+      setValue("");
+      return;
+    }
+    if (!/^https?:\/\//i.test(trimmed)) {
+      setError(t("linkNotRecognized"));
+      return;
+    }
+
+    setLoading(true);
+    try {
+      onAdd(await resolveVideo(trimmed));
+      setValue("");
+    } catch {
+      setError(t("resolveFailed"));
+    } finally {
+      setLoading(false);
+    }
+  }, [value, onAdd, t]);
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") void submit();
+  };
 
   return (
     <Modal
@@ -58,6 +93,7 @@ export function QueuePanel({ open, onOpenChange, queue, isHost, onAdd, onRemove 
               <Cell
                 key={item.id}
                 subtitle={item.addedByName}
+                style={{ animation: "fadeSlideUp 0.25s ease backwards", animationDelay: `${Math.min(index, 8) * 30}ms` }}
                 after={
                   isHost ? (
                     <IconButton mode="plain" size="s" onClick={() => onRemove(item.id)} aria-label={t("queueRemove")}>
@@ -66,7 +102,7 @@ export function QueuePanel({ open, onOpenChange, queue, isHost, onAdd, onRemove 
                   ) : undefined
                 }
               >
-                {index + 1}. {describeSource(item)}
+                {index + 1}. {describeSource(item.source)}
               </Cell>
             ))}
           </Section>
@@ -75,10 +111,20 @@ export function QueuePanel({ open, onOpenChange, queue, isHost, onAdd, onRemove 
           <Input
             placeholder="https://youtube.com/watch?v=..."
             value={value}
-            status={isInvalid ? "error" : "default"}
-            onChange={(event) => setValue(event.target.value)}
+            status={error ? "error" : "default"}
+            onChange={(event) => {
+              setValue(event.target.value);
+              setError(null);
+            }}
+            onKeyDown={handleKeyDown}
           />
-          <Button stretched size="l" disabled={!parsed} onClick={submit}>
+          {error && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <StickerPlayer id="confused" size={28} />
+              <span style={{ color: "var(--tg-theme-destructive-text-color, #ec3942)", fontSize: 14 }}>{error}</span>
+            </div>
+          )}
+          <Button stretched size="l" loading={loading} disabled={!value.trim() || loading} onClick={submit}>
             {t("queueAdd")}
           </Button>
         </div>

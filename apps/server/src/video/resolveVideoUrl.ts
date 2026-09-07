@@ -1,8 +1,6 @@
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import {
-  buildVkEmbedUrl,
-  buildXhamsterEmbedUrl, // Новый импорт
   matchMediaKind,
   matchVimeoId,
   matchYoutubeId,
@@ -10,6 +8,7 @@ import {
 } from "@stream/shared";
 import { assertPublicHttpUrl, pinnedPublicLookup } from "./ssrfGuard";
 import { isAdUrl } from "./adDomains";
+
 
 const MAX_BODY_BYTES = 2_000_000;
 const FETCH_TIMEOUT_MS = 8_000;
@@ -30,9 +29,14 @@ interface FetchedPage {
   finalUrl: string;
 }
 
-/** Given anything a user might paste — a YouTube link, a direct .mp4/.m3u8
- *  link, or a link to some web page that merely *embeds* a video — figures
- *  out what to actually play. Returns null if nothing playable was found. */
+/**
+ * Given anything a user might paste, figures out what — if anything — can be
+ * played *directly*: a YouTube/Vimeo link, a direct .mp4/.m3u8 link, or a web
+ * page that embeds one of those. Returns null when nothing directly playable
+ * was found — the caller then hands the link to the download subsystem
+ * (yt-dlp / Google Drive), which covers tube sites, VK, and everything else
+ * that used to fall back to a sync-less iframe.
+ */
 export async function resolveVideoUrl(rawUrl: string): Promise<VideoSource | null> {
   return resolveInner(rawUrl.trim(), 0);
 }
@@ -48,15 +52,7 @@ async function resolveInner(rawUrl: string, depth: number): Promise<VideoSource 
   const vimeoId = matchVimeoId(rawUrl);
   if (vimeoId) return { type: "vimeo", videoId: vimeoId };
 
-  // 3. Проверка VK
-  const vkEmbedUrl = buildVkEmbedUrl(rawUrl);
-  if (vkEmbedUrl) return { type: "iframe", url: vkEmbedUrl, title: "VK Video" };
-
-  // 4. НОВАЯ проверка xHamster
-  const xhamsterUrl = buildXhamsterEmbedUrl(rawUrl);
-  if (xhamsterUrl) return { type: "iframe", url: xhamsterUrl, title: "xHamster" };
-
-  // 5. Прямые ссылки на файлы
+  // 3. Прямые ссылки на файлы
   const extensionKind = matchMediaKind(rawUrl);
   if (extensionKind) return { type: "file", url: rawUrl, kind: extensionKind };
 
@@ -82,48 +78,18 @@ async function resolveInner(rawUrl: string, depth: number): Promise<VideoSource 
   for (const candidate of candidates) {
     const ytId = matchYoutubeId(candidate);
     if (ytId) return { type: "youtube", videoId: ytId };
-    
+
     const vId = matchVimeoId(candidate);
     if (vId) return { type: "vimeo", videoId: vId };
-
-    // Проверка xHamster в найденных кандидатах (например, в iframe на странице)
-    const xh = buildXhamsterEmbedUrl(candidate);
-    if (xh) return { type: "iframe", url: xh, title: "xHamster" };
 
     const kind = matchMediaKind(candidate);
     if (kind) return { type: "file", url: candidate, kind };
   }
 
-  // Fallback для сторонних плееров
-  const embed = candidates.find((candidate) => looksLikeEmbedPlayer(candidate, page.finalUrl));
-  if (embed) return { type: "iframe", url: embed, title: extractTitle(page.body) ?? undefined };
-
-  // Last resort: the page loaded fine but nothing recognizable as "the
-  // video" was found in it — embed the page itself rather than failing
-  // outright. Sync won't work (same as any other iframe source) and some
-  // sites block being framed, but this beats a flat rejection for anything
-  // that isn't blocked, when the alternative is a dead end either way.
-  return { type: "iframe", url: page.finalUrl, title: extractTitle(page.body) ?? undefined };
-}
-
-function extractTitle(html: string): string | null {
-  const match = /<title[^>]*>([^<]*)<\/title>/i.exec(html);
-  const title = match?.[1]?.trim();
-  return title ? title.slice(0, 200) : null;
-}
-
-function looksLikeEmbedPlayer(url: string, pageUrl: string): boolean {
-  let target: URL;
-  let source: URL;
-  try {
-    target = new URL(url);
-    source = new URL(pageUrl);
-  } catch {
-    return false;
-  }
-  if (target.hostname === source.hostname) return false;
-  const haystack = `${target.hostname}${target.pathname}`.toLowerCase();
-  return haystack.includes("embed") || haystack.includes("/player") || target.hostname.startsWith("player.");
+  // The page loaded but exposed nothing directly playable (only a
+  // proprietary embedded player, or a JS-built one). Not an error — the
+  // caller falls through to the download subsystem, which can still pull it.
+  return null;
 }
 
 async function fetchPage(startUrl: string): Promise<FetchedPage | null> {

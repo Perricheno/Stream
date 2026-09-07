@@ -3,6 +3,13 @@ dist/
 build/
 .env
 .env.local
+.env.bak.*
+
+# Local scratch / pasted reference material — not part of the project
+.claude-code-history/
+/*.txt
+/*.jpg
+/*.png
 *.log
 .DS_Store
 .turbo/

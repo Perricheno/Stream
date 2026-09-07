@@ -113,6 +113,11 @@ interface VideoControlsOverlayProps {
    *  player paused/seeked out of step with everyone else's until the next
    *  unrelated correction happened to arrive. */
   isHost: boolean;
+  /** Document Picture-in-Picture (floats this whole overlay + player above
+   *  every window, any source type) — preferred over the plain <video> PiP
+   *  below when available. See useDocumentPictureInPicture.ts. */
+  documentPipSupported?: boolean;
+  onToggleDocumentPip?: () => void;
 }
 
 export function VideoControlsOverlay({
@@ -121,6 +126,8 @@ export function VideoControlsOverlay({
   isFullscreen,
   onToggleFullscreen,
   isHost,
+  documentPipSupported,
+  onToggleDocumentPip,
 }: VideoControlsOverlayProps) {
   const [visible, setVisible] = useState(true);
   const [dragValue, setDragValue] = useState<number | null>(null);
@@ -287,9 +294,13 @@ export function VideoControlsOverlay({
   }, [onToggleFullscreen, showControls]);
 
   const handlePipClick = useCallback(() => {
-    playerRef.current?.requestPictureInPicture?.();
+    if (documentPipSupported && onToggleDocumentPip) {
+      onToggleDocumentPip();
+    } else {
+      playerRef.current?.requestPictureInPicture?.();
+    }
     showControls();
-  }, [playerRef, showControls]);
+  }, [documentPipSupported, onToggleDocumentPip, playerRef, showControls]);
 
   const cycleSpeed = useCallback(() => {
     const nextIndex = (speedIndex + 1) % PLAYBACK_SPEEDS.length;
@@ -313,7 +324,7 @@ export function VideoControlsOverlay({
   }, [playerRef, isMuted, showControls]);
 
   const displayedTime = dragValue ?? progress.currentTime;
-  const pipSupported = typeof playerRef.current?.requestPictureInPicture === "function";
+  const pipSupported = documentPipSupported || typeof playerRef.current?.requestPictureInPicture === "function";
 
   return (
     <div

@@ -69,6 +69,21 @@ export function listActiveRooms(): ActiveRoom[] {
   return result;
 }
 
+/**
+ * Whether `userId` is currently in a room that's playing library video
+ * `videoId`. This — not "did they add it" — is what gates streaming access
+ * (see http/videoLibraryRoutes.ts): a guest invited into a room has to be
+ * able to watch a video someone else downloaded, or shared viewing breaks on
+ * the first video that isn't yours.
+ */
+export function isUserWatchingLibraryVideo(userId: number, videoId: string): boolean {
+  for (const room of rooms.values()) {
+    if (room.source?.type !== "library" || room.source.videoId !== videoId) continue;
+    if (room.members.some((member) => member.userId === userId)) return true;
+  }
+  return false;
+}
+
 export function addMember(room: Room, member: RoomMember): void {
   // Someone (re)joined — cancel any pending teardown from the room having
   // gone empty (see removeMember).

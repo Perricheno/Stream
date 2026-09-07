@@ -50,9 +50,15 @@ videoRoutes.post("/resolve", rateLimit(30, 60_000), async (req, res) => {
     console.error(`[video/resolve] "${url}" failed:`, err);
     source = null;
   }
-  if (!source) {
-    res.status(422).json({ error: "couldn't find a playable video at that link" });
+  if (source) {
+    res.json({ source });
     return;
   }
-  res.json({ source });
+  // Nothing directly playable, but a real link — hand it to the download
+  // subsystem (POST /api/videos/import), which covers tube sites, VK, etc.
+  if (/^https?:\/\//i.test(url)) {
+    res.json({ needsDownload: true });
+    return;
+  }
+  res.status(422).json({ error: "couldn't find a playable video at that link" });
 });

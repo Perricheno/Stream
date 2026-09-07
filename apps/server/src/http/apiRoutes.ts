@@ -5,11 +5,19 @@ import { getProfile, getUserBasics, updateProfile } from "../db/userRepository";
 import { addFriendship, listFriends } from "../db/friendRepository";
 import { getRoom, listActiveRooms } from "../rooms/RoomStore";
 import { sendTelegramMessage } from "../telegram/sendTelegramMessage";
+import { authRoutes } from "./authRoutes";
 import { requireTelegramAuth } from "./requireTelegramAuth";
+import { videoRoutes } from "./videoRoutes";
+import { videoLibraryRoutes } from "./videoLibraryRoutes";
 import "./types";
 
 export const apiRoutes = Router();
+// Unauthenticated by design (this IS how a browser visitor establishes
+// identity in the first place) — must come before requireTelegramAuth below.
+apiRoutes.use("/auth", authRoutes);
 apiRoutes.use(requireTelegramAuth);
+apiRoutes.use("/video", videoRoutes);
+apiRoutes.use("/videos", videoLibraryRoutes);
 
 apiRoutes.get("/profile", (req, res) => {
   const profile = getProfile(req.telegramUser!.id);

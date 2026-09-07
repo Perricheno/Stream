@@ -23,7 +23,6 @@ import { ParticipantsModal } from "./ParticipantsModal";
 import { VideoSourcePicker } from "./VideoSourcePicker";
 import { QueuePanel } from "./QueuePanel";
 import { RoomQrModal } from "./RoomQrModal";
-import { parseVideoUrl } from "./parseVideoUrl";
 import { RoomToolbar } from "./RoomToolbar";
 import { ChatPanel } from "./ChatPanel";
 import styles from "./RoomScreen.module.css";
@@ -41,9 +40,12 @@ function ChatBubbleIcon() {
 interface RoomScreenProps {
   roomId: string;
   onExit: () => void;
+  /** Set when the room was opened from the bot's "watch together" deep link —
+   *  the just-downloaded library video to load as the source once we're host. */
+  initialVideoId?: string;
 }
 
-export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
+export function RoomScreen({ roomId, onExit, initialVideoId }: RoomScreenProps) {
   const { status, room, error, yourUserId } = useRoomSocket(roomId);
   const { profile } = useProfile();
   const { t } = useTranslation();
@@ -193,6 +195,17 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
     setPickingSource(false);
   }, []);
 
+  // Opened via the bot's "watch together" deep link: as soon as we're the
+  // host of this fresh room and nothing's playing yet, load the downloaded
+  // video. Runs once.
+  const initialVideoAppliedRef = useRef(false);
+  useEffect(() => {
+    if (initialVideoAppliedRef.current || !initialVideoId) return;
+    if (status !== "joined" || !isHost || room?.source) return;
+    initialVideoAppliedRef.current = true;
+    changeSource({ type: "library", videoId: initialVideoId });
+  }, [initialVideoId, status, isHost, room?.source, changeSource]);
+
   const sendChat = useCallback((text: string, replyTo?: ChatReplyPreview) => {
     socket.emit("chat:send", { text, replyTo });
   }, []);
@@ -215,9 +228,7 @@ export function RoomScreen({ roomId, onExit }: RoomScreenProps) {
     if (isHostRef.current) socket.emit("queue:advance");
   }, []);
 
-  const addToQueue = useCallback((raw: string) => {
-    const source = parseVideoUrl(raw);
-    if (!source) return;
+  const addToQueue = useCallback((source: VideoSource) => {
     socket.emit("queue:add", { source });
   }, []);
 

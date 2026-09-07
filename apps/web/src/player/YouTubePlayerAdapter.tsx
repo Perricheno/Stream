@@ -6,7 +6,7 @@ import styles from "./VideoPlayer.module.css";
 
 interface YouTubePlayerAdapterProps extends PlayerAdapterEvents {
   videoId: string;
-  suppressed: React.MutableRefObject<boolean>;
+  suppressed: React.MutableRefObject<number>;
 }
 
 /**

@@ -29,6 +29,12 @@ export default defineConfig({
         target: "http://localhost:4000",
         changeOrigin: true,
       },
+      // Lets Telegram's webhook POSTs (for bot commands + Business
+      // connections) reach the backend through this same tunnel hostname.
+      "/telegram": {
+        target: "http://localhost:4000",
+        changeOrigin: true,
+      },
     },
   },
 });

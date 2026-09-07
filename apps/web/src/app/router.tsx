@@ -11,11 +11,24 @@ const RoomScreen = lazy(loadRoomScreen);
 
 const START_PARAM_ROOM_PREFIX = "room_";
 const START_PARAM_ADD_FRIEND_PREFIX = "addfriend_";
+const START_PARAM_VIDEO_PREFIX = "video_";
 
 /** Lets a shared room link (`t.me/<bot>?startapp=room_XXXX`) open straight into that room. */
 function readRoomIdFromStartParam(startParam: string | undefined): string | null {
   if (!startParam?.startsWith(START_PARAM_ROOM_PREFIX)) return null;
   return startParam.slice(START_PARAM_ROOM_PREFIX.length).toUpperCase();
+}
+
+/** Lets the bot's "watch together" button (`t.me/<bot>?startapp=video_<id>`)
+ *  open a fresh room with that just-downloaded library video preloaded. */
+function readVideoIdFromStartParam(startParam: string | undefined): string | null {
+  if (!startParam?.startsWith(START_PARAM_VIDEO_PREFIX)) return null;
+  const id = startParam.slice(START_PARAM_VIDEO_PREFIX.length);
+  return /^[\w-]{6,64}$/.test(id) ? id : null;
+}
+
+function generateRoomId(): string {
+  return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
 /** Lets a personal "add me" link (`t.me/<bot>?startapp=addfriend_<userId>`) auto-add the friendship on open. */
@@ -35,8 +48,14 @@ function navigateWithTransition(update: () => void): void {
 
 export function AppRouter() {
   const { startParam } = useLaunchParams();
-  const [roomId, setRoomId] = useState<string | null>(() => readRoomIdFromStartParam(startParam));
+  // A `video_<id>` deep link opens a brand-new room with that library video
+  // already selected — resolve it to a room id once, on first mount.
+  const [pendingVideoId] = useState<string | null>(() => readVideoIdFromStartParam(startParam));
+  const [roomId, setRoomId] = useState<string | null>(
+    () => readRoomIdFromStartParam(startParam) ?? (readVideoIdFromStartParam(startParam) ? generateRoomId() : null),
+  );
   const [autoAddFriendId] = useState<number | null>(() => readFriendIdFromStartParam(startParam));
+  const initialVideoId = roomId && pendingVideoId ? pendingVideoId : undefined;
 
   const openRoom = useCallback((id: string) => navigateWithTransition(() => setRoomId(id)), []);
   const goHome = useCallback(() => navigateWithTransition(() => setRoomId(null)), []);
@@ -58,7 +77,7 @@ export function AppRouter() {
           </Placeholder>
         }
       >
-        <RoomScreen roomId={roomId} onExit={goHome} />
+        <RoomScreen roomId={roomId} onExit={goHome} initialVideoId={initialVideoId} />
       </Suspense>
     );
   }

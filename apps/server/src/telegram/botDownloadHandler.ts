@@ -1,0 +1,136 @@
+import type { VideoImportSourceType } from "@stream/shared";
+import { env } from "../config/env";
+import { createVideo } from "../db/videoRepository";
+import { classifyImport } from "../video/download/importSource";
+import { enqueueImport, onDownloadProgress, TELEGRAM_UPLOAD_REF_PREFIX } from "../video/download/downloadManager";
+import { assertPublicHttpUrl } from "../video/ssrfGuard";
+import type { TelegramDocument, TelegramMessage } from "./bot";
+import { editTelegramMessage, sendTelegramMessage } from "./sendTelegramMessage";
+
+const WELCOME =
+  "Пришли мне ссылку на видео (YouTube, VK, тюб-сайты, Google Drive — что угодно) или сам видеофайл. " +
+  "Я скачаю его на сервер и подготовлю для совместного просмотра — потом сможешь открыть его в Stream и смотреть вместе с друзьями в синхроне.";
+
+const URL_RE = /\bhttps?:\/\/\S+/i;
+const VIDEO_DOC_EXT_RE = /\.(mp4|mkv|webm|mov|m4v|avi|ts|m2ts|flv)$/i;
+const EDIT_THROTTLE_MS = 2500;
+// Stop listening for progress on a job that's clearly never going to finish.
+const PROGRESS_LISTEN_TIMEOUT_MS = 45 * 60 * 1000;
+
+function isVideoDocument(doc: TelegramDocument | undefined): doc is TelegramDocument {
+  if (!doc) return false;
+  return (doc.mime_type ?? "").startsWith("video/") || VIDEO_DOC_EXT_RE.test(doc.file_name ?? "");
+}
+
+function watchVideoUrl(videoId: string): string | undefined {
+  return env.botUsername ? `https://t.me/${env.botUsername}?startapp=video_${videoId}` : undefined;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** Single DM handler wired into the bot via registerBotMessageHandler. */
+export async function handleBotMessage(message: TelegramMessage): Promise<void> {
+  const chatId = message.chat.id;
+  const userId = message.from?.id;
+  if (!userId) return;
+
+  const text = (message.text ?? message.caption ?? "").trim();
+
+  if (/^\/(start|help)\b/i.test(text)) {
+    await sendTelegramMessage(chatId, WELCOME);
+    return;
+  }
+
+  const file = message.video ?? (isVideoDocument(message.document) ? message.document : undefined);
+  if (file) {
+    await startImport({
+      chatId,
+      userId,
+      sourceType: "telegram_upload",
+      ref: `${TELEGRAM_UPLOAD_REF_PREFIX}${file.file_id}`,
+      titleHint: file.file_name,
+    });
+    return;
+  }
+
+  const url = text.match(URL_RE)?.[0]?.replace(/[)\]}.,]+$/, "");
+  if (!url) {
+    await sendTelegramMessage(chatId, "Не вижу ссылки. Пришли ссылку на видео или сам видеофайл — и я его скачаю.");
+    return;
+  }
+
+  try {
+    await assertPublicHttpUrl(url);
+  } catch {
+    await sendTelegramMessage(chatId, "Эту ссылку не получится открыть — она ведёт на внутренний адрес.");
+    return;
+  }
+
+  const { sourceType } = classifyImport(url);
+  await startImport({ chatId, userId, sourceType, ref: url });
+}
+
+interface StartImportArgs {
+  chatId: number;
+  userId: number;
+  sourceType: VideoImportSourceType;
+  ref: string;
+  titleHint?: string;
+}
+
+async function startImport({ chatId, userId, sourceType, ref, titleHint }: StartImportArgs): Promise<void> {
+  const record = createVideo({ addedByUserId: userId, sourceType, sourceUrl: ref, title: titleHint ?? "" });
+  const statusMessageId = await sendTelegramMessage(chatId, "⏳ Скачивание начато…");
+
+  let lastEditAt = 0;
+  let done = false;
+
+  const unsubscribe = onDownloadProgress(record.id, (p) => {
+    if (done) return;
+
+    if (p.status === "ready") {
+      done = true;
+      unsubscribe();
+      const title = p.title || titleHint || "видео";
+      const button = watchVideoUrl(record.id);
+      const doneText = `✅ Сохранено: <b>${escapeHtml(title)}</b>`;
+      if (statusMessageId) {
+        void editTelegramMessage(chatId, statusMessageId, doneText, button ? { text: "Смотреть вместе", url: button } : undefined);
+      } else {
+        void sendTelegramMessage(chatId, doneText, button ? { text: "Смотреть вместе", url: button } : undefined);
+      }
+      return;
+    }
+
+    if (p.status === "failed") {
+      done = true;
+      unsubscribe();
+      const reason = p.errorMessage ? `: ${escapeHtml(p.errorMessage)}` : "";
+      const failText = `⚠️ Не удалось скачать это видео${reason}`;
+      if (statusMessageId) void editTelegramMessage(chatId, statusMessageId, failText);
+      else void sendTelegramMessage(chatId, failText);
+      return;
+    }
+
+    // downloading / converting — throttle edits (Telegram rate-limits edits
+    // to a single message hard).
+    if (!statusMessageId) return;
+    const now = Date.now();
+    if (now - lastEditAt < EDIT_THROTTLE_MS) return;
+    lastEditAt = now;
+
+    const label =
+      p.status === "converting"
+        ? "Обработка видео…"
+        : `Скачивание… ${Math.round(p.progressPercent)}%${p.speedText ? ` · ${p.speedText}` : ""}`;
+    void editTelegramMessage(chatId, statusMessageId, `⏳ ${label}`);
+  });
+
+  setTimeout(() => {
+    if (!done) unsubscribe();
+  }, PROGRESS_LISTEN_TIMEOUT_MS).unref?.();
+
+  enqueueImport(record.id);
+}

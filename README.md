@@ -15,6 +15,25 @@ Room features: a custom minimal video-control overlay (own play/pause/seek/fulls
 - Node 20+
 - pnpm 9 (`corepack enable` or `npm install -g pnpm`)
 - A tunnel tool for testing inside real Telegram: [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) or [ngrok](https://ngrok.com/download)
+- **For the "download a video from a link" feature:** `yt-dlp` and `ffmpeg`/`ffprobe` on the server. Not needed to run the sync core locally. See [`deploy/README.md`](deploy/README.md).
+
+## Downloading videos
+
+Links that aren't directly playable (tube sites, VK, Google Drive shares, a
+page that only embeds a player) are handled by downloading the video to the
+server with `yt-dlp` and then serving it as a plain file — which means full
+playback sync works for them, unlike the old sync-less iframe fallback.
+
+- **In the app:** paste such a link in the video picker (or the queue) — it
+  starts an import and the player shows progress until it's ready.
+- **Via the bot:** DM the bot a link or a video file; it replies with progress
+  and a "watch together" button that opens a fresh room with that video loaded.
+- Imported videos are private to whoever added them (the **Mine** tab in the
+  picker); anyone in a room playing one can stream it regardless of who added
+  it (a short-lived signed URL, minted per viewer).
+
+Operational notes (yt-dlp update cadence, the optional Local Bot API Server
+for >20 MB bot uploads, storage limits) are in [`deploy/README.md`](deploy/README.md).
 
 ## Getting started
 

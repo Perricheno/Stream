@@ -1,45 +1,64 @@
 import { env } from "../config/env";
+import { callBotApi } from "./botApi";
 
-const FETCH_TIMEOUT_MS = 8_000;
+export interface InlineButton {
+  text: string;
+  url: string;
+}
+
+function replyMarkup(button?: InlineButton) {
+  return button ? { inline_keyboard: [[{ text: button.text, url: button.url }]] } : undefined;
+}
 
 /**
  * Sends a message to a user via the Bot API. Only works if that user has
  * already started a conversation with the bot (Telegram restriction) — true
  * for anyone already in our `users` table, since that only happens after
  * they've opened the Mini App through the bot at least once.
+ *
+ * Returns the new message's id on success (so it can be edited later — see
+ * editTelegramMessage), or null on any failure.
  */
-export async function sendTelegramMessage(
+export async function sendTelegramMessage(chatId: number, text: string, inlineButton?: InlineButton): Promise<number | null> {
+  if (!env.botToken) return null;
+
+  try {
+    const message = await callBotApi<{ message_id: number }>("sendMessage", {
+      chat_id: chatId,
+      text,
+      parse_mode: "HTML",
+      reply_markup: replyMarkup(inlineButton),
+      disable_web_page_preview: true,
+    });
+    return message.message_id;
+  } catch {
+    // Timed out, or a network-level/API failure — a hung/failed request
+    // shouldn't propagate as an unhandled rejection into the caller.
+    return null;
+  }
+}
+
+/** Edits a message previously sent by sendTelegramMessage. Cheap to call
+ *  repeatedly, but Telegram rate-limits edits to the same message — callers
+ *  streaming progress must throttle (see the bot's download handler). */
+export async function editTelegramMessage(
   chatId: number,
+  messageId: number,
   text: string,
-  inlineButton?: { text: string; url: string },
+  inlineButton?: InlineButton,
 ): Promise<boolean> {
   if (!env.botToken) return false;
-
-  const body: Record<string, unknown> = {
-    chat_id: chatId,
-    text,
-    parse_mode: "HTML",
-  };
-  if (inlineButton) {
-    body.reply_markup = { inline_keyboard: [[{ text: inlineButton.text, url: inlineButton.url }]] };
-  }
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal,
+    await callBotApi("editMessageText", {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: "HTML",
+      reply_markup: replyMarkup(inlineButton),
+      disable_web_page_preview: true,
     });
-    return res.ok;
+    return true;
   } catch {
-    // Timed out, or a network-level failure — the caller only needs a
-    // boolean, and a hung/failed request shouldn't propagate as an
-    // unhandled rejection into the route handler.
     return false;
-  } finally {
-    clearTimeout(timer);
   }
 }

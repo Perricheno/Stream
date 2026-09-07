@@ -5,9 +5,12 @@ export type VideoSource =
   | { type: "youtube"; videoId: string }
   | { type: "vimeo"; videoId: string }
   | { type: "file"; url: string; kind: "mp4" | "hls" }
-  /** Last-resort fallback when a page only exposes an embeddable player, not a raw
-   *  stream — rendered as a sandboxed iframe with no playback sync (see IframePlayerAdapter). */
-  | { type: "iframe"; url: string; title?: string };
+  /** A video in the private library — downloaded from a link (yt-dlp), pulled
+   *  from a Google Drive share, or sent straight to the bot as a file.
+   *  Playback streams from GET /api/videos/:id/stream behind a short-lived
+   *  signed token; while the row is still status='downloading' the player
+   *  shows import progress instead of a stream (see VideoPlayer). */
+  | { type: "library"; videoId: string; title?: string };
 
 export interface Participant {
   userId: number;

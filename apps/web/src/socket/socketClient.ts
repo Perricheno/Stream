@@ -2,6 +2,7 @@ import { io, type Socket } from "socket.io-client";
 import { initData } from "@telegram-apps/sdk-react";
 import type { ClientToServerEvents, ServerToClientEvents } from "@stream/shared";
 import { getRawInitData } from "../telegram/rawInitData";
+import { shouldUseTelegramAuth } from "../telegram/environment";
 
 // Same-origin by default (works with the Vite dev proxy for /socket.io, and
 // with a single-hostname tunnel) — set VITE_SERVER_URL only if the backend
@@ -14,7 +15,13 @@ export const socket: RoomSocket = io(SERVER_URL, {
   autoConnect: false,
   // Prefer the SDK's parsed initData; fall back to reading the URL hash
   // ourselves if the SDK's stricter parser rejected otherwise-valid data.
-  auth: (cb) => cb({ initData: initData.raw() || getRawInitData() || "" }),
+  // Outside Telegram (and outside dev), send none at all — see apiClient.ts's
+  // matching comment; the session cookie below carries identity instead.
+  auth: (cb) => cb({ initData: shouldUseTelegramAuth() ? initData.raw() || getRawInitData() || "" : "" }),
+  // Lets the Telegram Login session cookie (see auth/TelegramLoginScreen.tsx)
+  // reach the handshake even if the frontend/backend ever end up on
+  // different origins.
+  withCredentials: true,
   // A phone's connection drops constantly (cell handoff, wifi switching,
   // the network just being bad for a few seconds) — giving up after only 3
   // tries turned an ordinary blip into "reconnect this manually" for the
