@@ -1,0 +1,22 @@
+{
+  // Cloudflare Worker that serves the built Mini App (static assets) AND
+  // reverse-proxies the API / Socket.io / webhook paths to the VPS backend,
+  // so the browser only ever talks to one origin (this Worker's domain) and
+  // no client-side CORS / cross-origin cookie handling is needed.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "watch2cp-web",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // Client-side routed SPA: unknown paths fall back to index.html.
+    "not_found_handling": "single-page-application"
+  },
+  "vars": {
+    // The VPS backend's public HTTPS origin (cloudflared tunnel hostname
+    // pointed at the server container). Override per-env as needed.
+    "ORIGIN_URL": "https://api.perricheno.com"
+  },
+  "observability": { "enabled": true }
+}

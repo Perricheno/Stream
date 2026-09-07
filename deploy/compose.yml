@@ -1,0 +1,30 @@
+# Server (Express + Socket.io + yt-dlp downloader) for a plain Docker host.
+#
+#   cd /opt/watch2cp                # wherever the repo is checked out
+#   cp deploy/server.env.example deploy/server.env && edit deploy/server.env
+#   docker compose -f deploy/compose.yml up -d --build
+#
+# The container port is published on localhost only — put a cloudflared
+# tunnel hostname (e.g. api.perricheno.com) in front of 127.0.0.1:4000.
+
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: watch2cp-server:latest
+    restart: unless-stopped
+    env_file:
+      - ./server.env
+    environment:
+      # Fixed regardless of what's in server.env — both live on the volume.
+      DB_PATH: /data/stream.db
+      MEDIA_DIR: /data/media
+      PORT: "4000"
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - watch2cp-data:/data
+
+volumes:
+  watch2cp-data:

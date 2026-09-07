@@ -1,0 +1,19 @@
+**/node_modules
+**/dist
+**/build
+**/.turbo
+**/*.tsbuildinfo
+.git
+.claude
+.claude-code-history
+# Server image doesn't build the web app — but its manifest must stay in
+# context so pnpm can resolve the workspace graph (see Dockerfile).
+apps/web
+!apps/web/package.json
+**/.env
+**/.env.*
+!**/.env.example
+*.txt
+*.jpg
+*.png
+deploy
