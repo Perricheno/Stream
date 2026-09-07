@@ -1,15 +1,18 @@
 import { Placeholder, Spinner } from "@telegram-apps/telegram-ui";
 import { AppProviders } from "./app/providers";
 import { AppRouter } from "./app/router";
+import { ErrorBoundary } from "./app/ErrorBoundary";
 import { TelegramLoginScreen } from "./auth/TelegramLoginScreen";
 import { useProfile } from "./telegram/ProfileContext";
 import { shouldUseTelegramAuth } from "./telegram/environment";
 
 export function App() {
   return (
-    <AppProviders>
-      <AuthGate />
-    </AppProviders>
+    <ErrorBoundary>
+      <AppProviders>
+        <AuthGate />
+      </AppProviders>
+    </ErrorBoundary>
   );
 }
 

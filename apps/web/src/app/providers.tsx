@@ -1,12 +1,15 @@
 import { useEffect, type ReactNode } from "react";
 import { AppRoot } from "@telegram-apps/telegram-ui";
-import { useLaunchParams } from "@telegram-apps/sdk-react";
 import { useTelegramAppearance } from "../telegram/useTelegramTheme";
+import { useSafeLaunchParams } from "../telegram/useSafeLaunchParams";
 import { ProfileProvider } from "../telegram/ProfileContext";
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const appearance = useTelegramAppearance();
-  const { platform } = useLaunchParams();
+  // Must not throw outside Telegram: this component wraps the whole app, so
+  // anything it throws blanks the page for browser visitors before they can
+  // even reach the Telegram Login screen. See useSafeLaunchParams.
+  const { platform } = useSafeLaunchParams();
 
   // Drives the fixed brand palette in global.css (Stream's own colors,
   // deliberately NOT the live --tg-theme-* values Telegram binds from each

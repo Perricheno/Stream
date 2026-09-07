@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { useLaunchParams } from "@telegram-apps/sdk-react";
 import { Placeholder, Spinner } from "@telegram-apps/telegram-ui";
+import { useSafeLaunchParams } from "../telegram/useSafeLaunchParams";
 import { HomeScreen } from "../screens/Home/HomeScreen";
 
 // Room pulls in socket.io-client, hls.js, the YouTube adapter and lottie-web —
@@ -47,7 +47,9 @@ function navigateWithTransition(update: () => void): void {
 }
 
 export function AppRouter() {
-  const { startParam } = useLaunchParams();
+  // Safe outside Telegram — a browser visitor has no launch params at all,
+  // and the SDK's own hook throws rather than returning empty.
+  const { startParam } = useSafeLaunchParams();
   // A `video_<id>` deep link opens a brand-new room with that library video
   // already selected — resolve it to a room id once, on first mount.
   const [pendingVideoId] = useState<string | null>(() => readVideoIdFromStartParam(startParam));
