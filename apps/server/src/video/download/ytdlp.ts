@@ -15,6 +15,16 @@ export interface YtDlpOptions {
   outputBase: string;
   onProgress: (percentText: string, speedText: string) => void;
   signal: AbortSignal;
+  /** curl_cffi impersonation target (e.g. "chrome"). Only set on the retry
+   *  after a site answered with a flat 403 — see downloadManager. */
+  impersonate?: string;
+}
+
+/** True for the "the site refused to talk to us at all" class of failure,
+ *  which browser impersonation usually gets past. */
+export function looksLikeBotBlock(message: string): boolean {
+  const t = message.toLowerCase();
+  return t.includes("403") || t.includes("forbidden") || t.includes("unable to download webpage") || t.includes("captcha");
 }
 
 const WALL_CLOCK_TIMEOUT_MS = 30 * 60 * 1000;
@@ -61,6 +71,7 @@ export function runYtDlp(opts: YtDlpOptions): Promise<YtDlpResult> {
     // YouTube (and a few others) block datacenter IPs unless the request
     // carries a logged-in session — see env.ytDlpCookies.
     if (env.ytDlpCookies && existsSync(env.ytDlpCookies)) args.push("--cookies", env.ytDlpCookies);
+    if (opts.impersonate) args.push("--impersonate", opts.impersonate);
     // YouTube: pick clients that work with cookies + a PO token, and point
     // yt-dlp's bgutil plugin at the provider sidecar. Both --extractor-args
     // are no-ops for non-YouTube extractors.

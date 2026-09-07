@@ -58,6 +58,15 @@ export const env = {
   ytDlpFormat:
     process.env.YTDLP_FORMAT ??
     "bv*[height<=?1080][vcodec^=avc1]+ba[ext=m4a]/b[height<=?1080][vcodec^=avc1]/bv*[height<=?1080]+ba/b[height<=?1080]/b",
+  /**
+   * Browser to impersonate (curl_cffi TLS fingerprint) when a site rejects
+   * yt-dlp outright — several tube sites answer the default client with a
+   * flat HTTP 403 before any extraction happens. Only used on a retry after
+   * such a failure, so the normal path (and YouTube's cookie/PO-token flow)
+   * keeps using yt-dlp's own HTTP client. Blank disables the retry, for a
+   * host without curl_cffi installed.
+   */
+  ytDlpImpersonate: process.env.YTDLP_IMPERSONATE ?? "chrome",
   /** Base URL for Bot API calls. Point this at a self-hosted Local Bot API
    *  Server (https://github.com/tdlib/telegram-bot-api) to lift the 20 MB
    *  getFile download limit up to 2000 MB — needed for pulling

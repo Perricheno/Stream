@@ -11,10 +11,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && pip3 install --break-system-packages --no-cache-dir -U \
          yt-dlp \
-         bgutil-ytdlp-pot-provider
+         bgutil-ytdlp-pot-provider \
+         curl_cffi
 # ^ bgutil-ytdlp-pot-provider is the yt-dlp *plugin* that fetches YouTube
 #   PO tokens from the companion HTTP service (deploy/compose.yml's
 #   bgutil-provider). YouTube returns no playable formats without it.
+#   curl_cffi is what makes `--impersonate` available: several tube sites
+#   reject yt-dlp's default TLS fingerprint outright with HTTP 403 before
+#   any extraction happens (see the retry in download/downloadManager.ts).
 
 RUN corepack enable
 

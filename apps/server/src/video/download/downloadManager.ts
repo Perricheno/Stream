@@ -1,12 +1,13 @@
 import { EventEmitter } from "node:events";
 import { rename } from "node:fs/promises";
+import { env } from "../../config/env";
 import { getVideo, listInterruptedVideos, updateVideo } from "../../db/videoRepository";
 import { deleteMediaFiles, hasRoomFor, mediaFilePath } from "../media/mediaStore";
 import { downloadFromDrive } from "./googleDrive";
 import { classifyImport } from "./importSource";
 import { ensureStreamable } from "./probe";
 import { downloadTelegramFile } from "./telegramFile";
-import { runYtDlp } from "./ytdlp";
+import { looksLikeBotBlock, runYtDlp } from "./ytdlp";
 
 /** How a `telegram_upload` row stores the file reference in `source_url`
  *  (there's no real URL for a file sent to the bot). */
@@ -119,19 +120,31 @@ async function runJob(videoId: string, signal: AbortSignal): Promise<void> {
       });
       downloadedPath = res.filePath;
     } else {
-      const res = await runYtDlp({
-        url: record.sourceUrl ?? "",
-        outputBase: rawBase,
-        signal,
-        onProgress: (percentText, speedText) =>
-          emit({
-            videoId,
-            status: "downloading",
-            progressPercent: parsePercent(percentText),
-            speedText: speedText || undefined,
-            title,
-          }),
-      });
+      const onProgress = (percentText: string, speedText: string) =>
+        emit({
+          videoId,
+          status: "downloading",
+          progressPercent: parsePercent(percentText),
+          speedText: speedText || undefined,
+          title,
+        });
+      const url = record.sourceUrl ?? "";
+
+      let res;
+      try {
+        res = await runYtDlp({ url, outputBase: rawBase, signal, onProgress });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        // Several tube sites answer yt-dlp's default TLS fingerprint with a
+        // flat 403 before extraction even starts. Retrying once with a
+        // browser fingerprint gets past that; the first attempt stays plain
+        // so the paths that already work (YouTube's cookie/PO-token flow)
+        // aren't disturbed.
+        if (signal.aborted || !env.ytDlpImpersonate || !looksLikeBotBlock(message)) throw err;
+        console.log(`[download] ${videoId} blocked (${message}) — retrying as ${env.ytDlpImpersonate}`);
+        res = await runYtDlp({ url, outputBase: rawBase, signal, onProgress, impersonate: env.ytDlpImpersonate });
+      }
+
       downloadedPath = res.filePath;
       title = title || res.title;
       if (res.durationSeconds) updateVideo(videoId, { durationSeconds: res.durationSeconds });
