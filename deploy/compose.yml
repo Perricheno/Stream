@@ -14,6 +14,8 @@ services:
       dockerfile: Dockerfile
     image: watch2cp-server:latest
     restart: unless-stopped
+    depends_on:
+      - bgutil-provider
     env_file:
       - ./server.env
     environment:
@@ -21,10 +23,20 @@ services:
       DB_PATH: /data/stream.db
       MEDIA_DIR: /data/media
       PORT: "4000"
+      # YouTube PO-token provider (the bgutil sidecar below, same network).
+      YTDLP_POT_PROVIDER_URL: http://bgutil-provider:4416
     ports:
       - "127.0.0.1:4000:4000"
     volumes:
       - watch2cp-data:/data
+
+  # Generates the YouTube PO tokens yt-dlp needs to get playable formats at
+  # all. Stateless; no volume. Talks only to `server` over the compose network.
+  bgutil-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    restart: unless-stopped
+    expose:
+      - "4416"
 
 volumes:
   watch2cp-data:

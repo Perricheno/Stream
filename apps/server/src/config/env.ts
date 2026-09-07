@@ -35,6 +35,14 @@ export const env = {
    *  drop the file here. Passed as `--cookies` only when the file exists, so
    *  a missing/blank value just means "no cookies". */
   ytDlpCookies: process.env.YTDLP_COOKIES ?? "/data/youtube-cookies.txt",
+  /** HTTP base URL of a bgutil PO-token provider. YouTube returns no playable
+   *  formats without a PO token; the provider (deploy/compose.yml's
+   *  bgutil-provider sidecar) mints them. Blank = don't pass it (local dev
+   *  without the sidecar). */
+  ytDlpPotProviderUrl: process.env.YTDLP_POT_PROVIDER_URL ?? "",
+  /** Persistent cache dir for yt-dlp — keeps the EJS n-challenge solver
+   *  script (downloaded once from GitHub) across container restarts. */
+  ytDlpCacheDir: process.env.YTDLP_CACHE_DIR ?? "/data/.ytdlp-cache",
   /** Base URL for Bot API calls. Point this at a self-hosted Local Bot API
    *  Server (https://github.com/tdlib/telegram-bot-api) to lift the 20 MB
    *  getFile download limit up to 2000 MB — needed for pulling

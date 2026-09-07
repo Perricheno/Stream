@@ -41,6 +41,12 @@ export function runYtDlp(opts: YtDlpOptions): Promise<YtDlpResult> {
       // extraction is degraded (missing formats, weaker bot-check handling).
       "--js-runtimes",
       "node",
+      // Lets yt-dlp fetch the EJS "n challenge" solver from GitHub (cached in
+      // --cache-dir) — required or YouTube returns no usable formats.
+      "--remote-components",
+      "ejs:github",
+      "--cache-dir",
+      env.ytDlpCacheDir,
       "--progress-template",
       "download:%(progress._percent_str)s|%(progress._speed_str)s",
       "--print",
@@ -55,6 +61,13 @@ export function runYtDlp(opts: YtDlpOptions): Promise<YtDlpResult> {
     // YouTube (and a few others) block datacenter IPs unless the request
     // carries a logged-in session — see env.ytDlpCookies.
     if (env.ytDlpCookies && existsSync(env.ytDlpCookies)) args.push("--cookies", env.ytDlpCookies);
+    // YouTube: pick clients that work with cookies + a PO token, and point
+    // yt-dlp's bgutil plugin at the provider sidecar. Both --extractor-args
+    // are no-ops for non-YouTube extractors.
+    args.push("--extractor-args", "youtube:player_client=default,web_safari");
+    if (env.ytDlpPotProviderUrl) {
+      args.push("--extractor-args", `youtubepot-bgutilhttp:base_url=${env.ytDlpPotProviderUrl}`);
+    }
     if (env.ffmpegPath !== "ffmpeg") args.push("--ffmpeg-location", dirname(env.ffmpegPath));
     args.push(opts.url);
 

@@ -69,6 +69,12 @@ fail on this server until you give yt-dlp a cookies file:
 
 Non-YouTube sites generally work without this.
 
+**PO token provider:** YouTube also returns no playable formats without a
+"proof of origin" token. `deploy/compose.yml` runs the `bgutil-provider`
+sidecar for this automatically — nothing to configure. yt-dlp additionally
+downloads a small "n challenge" solver script from GitHub on first use
+(cached under `/data/.ytdlp-cache`).
+
 ## 2. Keep yt-dlp updated — this is not optional
 
 Sites change their players and anti-bot measures constantly; extractors break
