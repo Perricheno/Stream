@@ -29,6 +29,12 @@ export const env = {
   ytDlpPath: process.env.YTDLP_PATH ?? "yt-dlp",
   ffmpegPath: process.env.FFMPEG_PATH ?? "ffmpeg",
   ffprobePath: process.env.FFPROBE_PATH ?? "ffprobe",
+  /** Netscape-format cookies.txt for yt-dlp. YouTube (and some other sites)
+   *  hard-block datacenter IPs with "confirm you're not a bot" unless the
+   *  request carries a logged-in session — export cookies from a browser and
+   *  drop the file here. Passed as `--cookies` only when the file exists, so
+   *  a missing/blank value just means "no cookies". */
+  ytDlpCookies: process.env.YTDLP_COOKIES ?? "/data/youtube-cookies.txt",
   /** Base URL for Bot API calls. Point this at a self-hosted Local Bot API
    *  Server (https://github.com/tdlib/telegram-bot-api) to lift the 20 MB
    *  getFile download limit up to 2000 MB — needed for pulling

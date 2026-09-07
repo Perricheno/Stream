@@ -46,6 +46,29 @@ python3 -m pip install -U yt-dlp
 If any of these aren't on `PATH`, point at them explicitly in
 `apps/server/.env`: `YTDLP_PATH`, `FFMPEG_PATH`, `FFPROBE_PATH`.
 
+## 1b. YouTube cookies — required on a cloud/VPS IP
+
+YouTube blocks datacenter IPs with *"Sign in to confirm you're not a bot"*
+unless the request carries a logged-in session. Downloads from YouTube will
+fail on this server until you give yt-dlp a cookies file:
+
+1. In a browser **logged into a YouTube account** (ideally a throwaway one),
+   export cookies with an extension like *"Get cookies.txt LOCALLY"* — save
+   as Netscape `cookies.txt`.
+2. Put it on the server's data volume:
+
+   ```bash
+   docker compose -f deploy/compose.yml cp ./youtube-cookies.txt \
+     server:/data/youtube-cookies.txt
+   ```
+
+   The server picks it up on the next download — no restart needed
+   (`YTDLP_COOKIES` defaults to `/data/youtube-cookies.txt`).
+3. Cookies expire — re-export every few weeks, or when YouTube downloads
+   start failing with the bot-wall message again.
+
+Non-YouTube sites generally work without this.
+
 ## 2. Keep yt-dlp updated — this is not optional
 
 Sites change their players and anti-bot measures constantly; extractors break

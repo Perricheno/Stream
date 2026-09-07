@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { env } from "../../config/env";
 
@@ -36,6 +37,10 @@ export function runYtDlp(opts: YtDlpOptions): Promise<YtDlpResult> {
       "--newline",
       "--no-playlist",
       "--no-warnings",
+      // node is in the image; without a JS runtime yt-dlp's YouTube
+      // extraction is degraded (missing formats, weaker bot-check handling).
+      "--js-runtimes",
+      "node",
       "--progress-template",
       "download:%(progress._percent_str)s|%(progress._speed_str)s",
       "--print",
@@ -47,6 +52,9 @@ export function runYtDlp(opts: YtDlpOptions): Promise<YtDlpResult> {
       "-o",
       `${opts.outputBase}.%(ext)s`,
     ];
+    // YouTube (and a few others) block datacenter IPs unless the request
+    // carries a logged-in session — see env.ytDlpCookies.
+    if (env.ytDlpCookies && existsSync(env.ytDlpCookies)) args.push("--cookies", env.ytDlpCookies);
     if (env.ffmpegPath !== "ffmpeg") args.push("--ffmpeg-location", dirname(env.ffmpegPath));
     args.push(opts.url);
 
@@ -122,7 +130,11 @@ export function runYtDlp(opts: YtDlpOptions): Promise<YtDlpResult> {
 function summariseYtDlpError(stderrLines: string[]): string {
   const text = stderrLines.join(" ").toLowerCase();
   if (text.includes("unsupported url") || text.includes("no video formats")) return "this site isn't supported";
-  if (text.includes("private") || text.includes("login required") || text.includes("sign in")) return "the video is private";
+  // YouTube's datacenter-IP bot wall — distinct from an actually-private video.
+  if (text.includes("confirm you") && text.includes("not a bot")) {
+    return "YouTube is blocking the server — a fresh cookies file is needed (see deploy/README.md)";
+  }
+  if (text.includes("private") || text.includes("login required") || text.includes("members-only")) return "the video is private";
   if (text.includes("geo") && text.includes("restrict")) return "the video is geo-restricted";
   if (text.includes("404") || text.includes("not found") || text.includes("removed")) return "the video no longer exists";
   if (text.includes("timed out") || text.includes("timeout")) return "the download timed out";
