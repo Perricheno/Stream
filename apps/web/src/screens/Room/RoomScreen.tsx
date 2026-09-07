@@ -124,7 +124,12 @@ export function RoomScreen({ roomId, onExit, initialVideoId }: RoomScreenProps) 
         return;
       }
       attempts += 1;
-      if (attempts >= 50) return; // ~10s
+      // Generous: a `library` source's player only mounts once its import
+      // finishes and a stream token is fetched, which is easily longer than
+      // the few seconds a YouTube/Vimeo iframe handshake needs. Giving up at
+      // ~10s meant a just-downloaded video sat paused at 0:00 with nobody
+      // having pressed anything.
+      if (attempts >= 300) return; // ~60s
       setTimeout(tryPlay, 200);
     };
     tryPlay();

@@ -43,6 +43,21 @@ export const env = {
   /** Persistent cache dir for yt-dlp — keeps the EJS n-challenge solver
    *  script (downloaded once from GitHub) across container restarts. */
   ytDlpCacheDir: process.env.YTDLP_CACHE_DIR ?? "/data/.ytdlp-cache",
+  /**
+   * yt-dlp format selector. The default deliberately caps at 1080p and
+   * prefers H.264+AAC in MP4:
+   *  - "best" without a cap picks whatever the site offers, which on YouTube
+   *    means AV1 at absurd bitrates (a 2.5-minute clip came out at 2.7 GB —
+   *    ~140 Mbit/s, which no connection here can stream in real time, so
+   *    playback stalls into a slideshow);
+   *  - H.264/AAC also needs no transcode to be browser-streamable, so the
+   *    post-download step stays a cheap remux (see download/probe.ts).
+   * Raise it (or drop the codec preference) only if the link between the
+   * server and the viewers can actually carry it.
+   */
+  ytDlpFormat:
+    process.env.YTDLP_FORMAT ??
+    "bv*[height<=?1080][vcodec^=avc1]+ba[ext=m4a]/b[height<=?1080][vcodec^=avc1]/bv*[height<=?1080]+ba/b[height<=?1080]/b",
   /** Base URL for Bot API calls. Point this at a self-hosted Local Bot API
    *  Server (https://github.com/tdlib/telegram-bot-api) to lift the 20 MB
    *  getFile download limit up to 2000 MB — needed for pulling

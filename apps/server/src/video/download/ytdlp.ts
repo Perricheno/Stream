@@ -52,7 +52,7 @@ export function runYtDlp(opts: YtDlpOptions): Promise<YtDlpResult> {
       "--print",
       `after_move:${META_MARKER}${SEP}%(title)s${SEP}%(duration)s${SEP}%(filepath)s`,
       "-f",
-      "bestvideo+bestaudio/best",
+      env.ytDlpFormat,
       "--merge-output-format",
       "mp4",
       "-o",

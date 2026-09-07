@@ -127,6 +127,14 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
   // change needed".
   const lastCommandedPlayingRef = useRef<boolean | null>(null);
   const preBackgroundSuppressedRef = useRef(0);
+  // Whether this player has ever received a forced, snap-to-position sync.
+  // A `library` video's player only mounts once its import finishes and a
+  // stream token is fetched, which can easily take longer than the initial
+  // retry loop below is willing to wait — so the periodic recheck also
+  // force-syncs the first time it finds a ready player, however late that is.
+  // Without it, joining before the player exists left the video unsynced
+  // until somebody happened to press play.
+  const initialSyncDoneRef = useRef(false);
   const { serverNow } = useServerClock(socket);
 
   const stopSoftCorrection = useCallback(() => {
@@ -342,6 +350,7 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
     // to be, so the very next sync must always be treated as a real
     // transition — see lastCommandedPlayingRef's doc comment.
     lastCommandedPlayingRef.current = null;
+    initialSyncDoneRef.current = false;
     if (!initialPlayback) return;
     let cancelled = false;
     let attempts = 0;
@@ -350,6 +359,7 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
       if (cancelled) return;
       if (playerRef.current?.isReady()) {
         syncLog("initial-sync", { after: attempts, state: lastKnownStateRef.current });
+        initialSyncDoneRef.current = true;
         // lastKnownStateRef.current, not the closure-captured initialPlayback
         // — the retry loop below can take up to INITIAL_SYNC_MAX_ATTEMPTS *
         // INITIAL_SYNC_RETRY_MS (~10s) to actually fire, and a host's own
@@ -378,7 +388,18 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
   useEffect(() => {
     const interval = setInterval(() => {
       const state = lastKnownStateRef.current;
-      if (state) applyServerState(state);
+      if (!state) return;
+      // First time we see a ready player, snap to position rather than
+      // gently nudging — see initialSyncDoneRef. Covers players that mount
+      // long after the initial retry loop above gave up (a library video
+      // that was still importing when the room was joined).
+      if (!initialSyncDoneRef.current && playerRef.current?.isReady()) {
+        initialSyncDoneRef.current = true;
+        syncLog("initial-sync:late", { state });
+        applyServerState(state, true);
+        return;
+      }
+      applyServerState(state);
     }, PERIODIC_RECHECK_MS);
     return () => clearInterval(interval);
   }, [applyServerState]);

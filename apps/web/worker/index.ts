@@ -15,6 +15,9 @@ interface Env {
 
 // Everything the Express/Socket.io server owns. Anything else is a static asset.
 const PROXIED_PREFIXES = ["/api/", "/socket.io", "/status", "/telegram/", "/health"];
+/** Video bytes — cacheable at the edge, unlike every other proxied path. */
+const VIDEO_STREAM_RE = /^\/api\/videos\/[^/]+\/stream$/;
+const VIDEO_EDGE_TTL_SECONDS = 604800; // 7 days; the bytes behind an id never change
 
 function isProxied(pathname: string): boolean {
   return PROXIED_PREFIXES.some((p) => pathname === p.replace(/\/$/, "") || pathname.startsWith(p));
@@ -32,6 +35,18 @@ export default {
       const proxied = new Request(target, request);
       proxied.headers.set("X-Forwarded-Host", url.host);
       proxied.headers.set("X-Forwarded-Proto", "https");
+
+      if (VIDEO_STREAM_RE.test(url.pathname)) {
+        // Hold the file at the edge. Without this every seek and every
+        // buffer refill is a round trip to the origin server, which turns
+        // playback into a slideshow whenever that server is far away.
+        // The signed token stays in the cache key (it's part of the URL), so
+        // caching doesn't widen who can fetch the bytes.
+        return fetch(proxied, {
+          cf: { cacheEverything: true, cacheTtl: VIDEO_EDGE_TTL_SECONDS },
+        } as RequestInit);
+      }
+
       return fetch(proxied);
     }
 

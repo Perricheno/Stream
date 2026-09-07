@@ -39,7 +39,14 @@ videoStreamRoute.get("/:id/stream", async (req, res) => {
     "Content-Type": "video/mp4",
     "Accept-Ranges": "bytes",
     "Content-Length": String(range.end - range.start + 1),
-    "Cache-Control": "private, no-store",
+    // The bytes behind a given id never change (the id is a fresh UUID per
+    // import), so they're safe to cache hard. This is what lets Cloudflare
+    // hold the file at an edge near the viewer instead of every seek and
+    // buffer-refill crossing the network to the origin server — without it
+    // playback stutters badly whenever the origin is far away. Access is
+    // still gated: the token is part of the URL, so it's part of the cache
+    // key, and a request without a valid one never reaches this handler.
+    "Cache-Control": "public, max-age=604800, immutable",
   });
   if (rangeHeader) res.set("Content-Range", `bytes ${range.start}-${range.end}/${range.size}`);
 
