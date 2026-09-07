@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { env } from "../config/env";
+import { createAuthRequest, deleteAuthRequest, readAuthRequest } from "../db/authRequestRepository";
 import { upsertUser } from "../db/userRepository";
 import { validateTelegramLoginToken } from "../telegram/validateTelegramLoginToken";
 import { createSessionToken, SESSION_COOKIE_NAME } from "./session";
@@ -50,4 +51,54 @@ authRoutes.post("/telegram-login", async (req, res) => {
 authRoutes.post("/logout", (_req, res) => {
   res.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
   res.json({ ok: true });
+});
+
+/**
+ * Browser login without Telegram's Login Widget.
+ *
+ * The widget (and the OIDC flow) only work from an origin pre-registered
+ * with @BotFather, which is fiddly and fails opaquely with "origin required".
+ * This path needs none of that: mint a one-time token, send the visitor to
+ * the bot with it, and let the bot vouch for them. The bot already knows who
+ * they are — that's the whole trust anchor.
+ *
+ *   POST /link  -> { token, deepLink }   open deepLink, then poll
+ *   GET  /poll  -> pending | completed | expired  (sets the session cookie)
+ */
+authRoutes.post("/link", (_req, res) => {
+  if (!env.botUsername) {
+    res.status(503).json({ error: "BOT_USERNAME is not configured on the server" });
+    return;
+  }
+  const token = createAuthRequest();
+  res.json({ token, deepLink: `https://t.me/${env.botUsername}?start=${token}` });
+});
+
+authRoutes.get("/poll", async (req, res) => {
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  if (!token) {
+    res.status(400).json({ error: "missing token" });
+    return;
+  }
+
+  const state = readAuthRequest(token);
+  if (state.status !== "completed") {
+    res.json({ status: state.status });
+    return;
+  }
+
+  const user = { id: state.user.id, firstName: state.user.first_name, photoUrl: state.user.photo_url };
+  upsertUser(user);
+  const sessionToken = await createSessionToken(user);
+  // One session per token — a replayed deep link must not mint another.
+  deleteAuthRequest(token);
+
+  res.cookie(SESSION_COOKIE_NAME, sessionToken, {
+    httpOnly: true,
+    secure: req.protocol === "https",
+    sameSite: "lax",
+    maxAge: SESSION_COOKIE_MAX_AGE_MS,
+    path: "/",
+  });
+  res.json({ status: "completed", user });
 });

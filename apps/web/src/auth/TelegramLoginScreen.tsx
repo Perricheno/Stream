@@ -11,8 +11,12 @@ const copy = isRussian
       subheadline: "Общая комната, один плеер на всех и синхронное воспроизведение — с друзьями, где бы вы ни были.",
       features: ["🔄 Синхронно", "💬 Чат в комнате", "📺 Любые видео"],
       button: "Войти через Telegram",
+      buttonPending: "Ждём подтверждения…",
       note: "Без паролей и регистрации — только ваш Telegram-аккаунт.",
+      pendingNote: "Откройте бота и нажмите «Start» — эта страница войдёт сама.",
+      openManually: "Не открылся Telegram? Откройте вручную",
       error: "Не получилось войти. Попробуйте ещё раз.",
+      expired: "Время вышло. Нажмите «Войти» ещё раз.",
       notConfigured: "Вход через сайт пока не настроен.",
     }
   : {
@@ -20,8 +24,12 @@ const copy = isRussian
       subheadline: "One shared room, one player for everyone — with friends, wherever they are.",
       features: ["🔄 Real-time sync", "💬 Room chat", "📺 Any video"],
       button: "Log in with Telegram",
+      buttonPending: "Waiting for confirmation…",
       note: "No passwords, no sign-up — just your Telegram account.",
+      pendingNote: "Open the bot and press Start — this page will log itself in.",
+      openManually: "Telegram didn't open? Open it manually",
       error: "Login failed. Please try again.",
+      expired: "That took too long. Press Log in again.",
       notConfigured: "Website login isn't configured yet.",
     };
 
@@ -54,7 +62,7 @@ function BrandMark() {
  * product, not a settings-style screen inside an already-trusted app.
  */
 export function TelegramLoginScreen() {
-  const { state, login, configured } = useTelegramLoginWidget();
+  const { state, login, deepLink, configured } = useTelegramLoginWidget();
 
   return (
     <div className={styles.page}>
@@ -82,10 +90,18 @@ export function TelegramLoginScreen() {
           <div className={styles.ctaArea}>
             <button type="button" className={styles.ctaButton} onClick={login} disabled={state === "pending"}>
               {state === "pending" ? <span className={styles.spinner} aria-hidden /> : <TelegramGlyph />}
-              {copy.button}
+              {state === "pending" ? copy.buttonPending : copy.button}
             </button>
-            <p className={styles.ctaNote}>{copy.note}</p>
+            <p className={styles.ctaNote}>{state === "pending" ? copy.pendingNote : copy.note}</p>
+            {/* The deep link opens in a popup, which some browsers block —
+                always leave a plain link as a way through. */}
+            {state === "pending" && deepLink && (
+              <a className={styles.ctaNote} href={deepLink} target="_blank" rel="noreferrer">
+                {copy.openManually}
+              </a>
+            )}
             {state === "error" && <p className={styles.error}>{copy.error}</p>}
+            {state === "expired" && <p className={styles.error}>{copy.expired}</p>}
           </div>
         ) : (
           <p className={styles.notConfigured}>{copy.notConfigured}</p>

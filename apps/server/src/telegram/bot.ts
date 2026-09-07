@@ -30,7 +30,7 @@ export interface TelegramVideo {
 export interface TelegramMessage {
   message_id: number;
   chat: { id: number; type?: string };
-  from?: { id: number; is_bot?: boolean };
+  from?: { id: number; is_bot?: boolean; first_name?: string; last_name?: string; username?: string };
   text?: string;
   caption?: string;
   document?: TelegramDocument;

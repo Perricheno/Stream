@@ -1,5 +1,6 @@
 import type { VideoImportSourceType } from "@stream/shared";
 import { env } from "../config/env";
+import { completeAuthRequest } from "../db/authRequestRepository";
 import { createVideo } from "../db/videoRepository";
 import { classifyImport } from "../video/download/importSource";
 import { enqueueImport, onDownloadProgress, TELEGRAM_UPLOAD_REF_PREFIX } from "../video/download/downloadManager";
@@ -38,7 +39,32 @@ export async function handleBotMessage(message: TelegramMessage): Promise<void> 
 
   const text = (message.text ?? message.caption ?? "").trim();
 
-  if (/^\/(start|help)\b/i.test(text)) {
+  const startMatch = /^\/start(?:@\S+)?(?:\s+(\S+))?/i.exec(text);
+  if (startMatch) {
+    // `/start <token>` is the website's login handshake: the browser minted
+    // the token and is polling for it, and the bot vouching for who sent this
+    // message is the whole trust anchor (see http/authRoutes.ts).
+    const token = startMatch[1];
+    if (token) {
+      const claimed = completeAuthRequest(token, {
+        id: userId,
+        first_name: message.from?.first_name ?? "User",
+        last_name: message.from?.last_name,
+        username: message.from?.username,
+      });
+      await sendTelegramMessage(
+        chatId,
+        claimed
+          ? "✅ Вход подтверждён — возвращайся на вкладку с сайтом, она уже открывается."
+          : "⚠️ Ссылка для входа устарела или уже использована. Открой сайт и нажми «Войти» заново.",
+      );
+      return;
+    }
+    await sendTelegramMessage(chatId, WELCOME);
+    return;
+  }
+
+  if (/^\/help\b/i.test(text)) {
     await sendTelegramMessage(chatId, WELCOME);
     return;
   }

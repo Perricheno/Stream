@@ -56,4 +56,15 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status);
   CREATE INDEX IF NOT EXISTS idx_videos_added_by ON videos(added_by_user_id);
+
+  -- Browser login without Telegram's Login Widget: the site mints a token,
+  -- sends the visitor to t.me/<bot>?start=<token>, and the bot marks the row
+  -- completed once they press Start. The page polls until then. Needs no
+  -- registered domain, which the widget/OIDC flow does.
+  CREATE TABLE IF NOT EXISTS auth_requests (
+    token TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'pending',   -- 'pending' | 'completed'
+    tg_user_json TEXT,
+    created_at INTEGER NOT NULL
+  );
 `);

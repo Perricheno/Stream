@@ -1,102 +1,88 @@
-import { useCallback, useEffect, useState } from "react";
-
-const BOT_ID = import.meta.env.VITE_TELEGRAM_BOT_ID as string | undefined;
-const WIDGET_SCRIPT_SRC = "https://oauth.telegram.org/js/telegram-login.js?22";
-
-interface TelegramLoginAuthData {
-  id_token?: string;
-  error?: string;
-}
-
-declare global {
-  interface Window {
-    Telegram?: {
-      Login: {
-        auth(
-          // The Telegram Login library documents client_id / scope / lang /
-          // nonce. `request_access` is from the older widget API — the
-          // library reads it only as a fallback and it isn't needed here.
-          options: { client_id: string; scope?: string[]; lang?: string; nonce?: string },
-          callback: (data: TelegramLoginAuthData | false) => void,
-        ): void;
-      };
-    };
-  }
-}
-
-/** Loads the widget script at most once, reusing an already-loading/loaded
- *  copy — the login screen can be reached again (e.g. after a failed
- *  attempt) without re-injecting a duplicate <script> tag each time. */
-function loadWidgetScript(): Promise<void> {
-  if (window.Telegram?.Login) return Promise.resolve();
-  const existing = document.querySelector<HTMLScriptElement>(`script[src="${WIDGET_SCRIPT_SRC}"]`);
-  if (existing) {
-    return new Promise((resolve, reject) => {
-      existing.addEventListener("load", () => resolve());
-      existing.addEventListener("error", () => reject(new Error("failed to load Telegram Login widget")));
-    });
-  }
-  return new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = WIDGET_SCRIPT_SRC;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("failed to load Telegram Login widget"));
-    document.head.appendChild(script);
-  });
-}
-
-export type TelegramLoginState = "idle" | "pending" | "error";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * Drives Telegram's hosted login popup (the OIDC flow in oath.txt) via its JS
- * API rather than the injected iframe widget, so callers can render their own
- * button instead of Telegram's default-styled one. Shared by every screen
- * that needs a "Log in with Telegram" action (see TelegramLoginScreen.tsx).
+ * Browser login via the bot, not Telegram's Login Widget.
+ *
+ * The widget (and the OIDC flow behind it) only work from an origin that's
+ * been pre-registered with @BotFather, and until it is they fail with a bare
+ * "origin required" and no way to tell what's wrong. This path avoids the
+ * whole thing: ask the server for a one-time token, send the visitor to
+ * `t.me/<bot>?start=<token>`, and poll until the bot reports back that they
+ * pressed Start. The bot already knows who they are — that's the trust
+ * anchor, and it needs no domain registration at all.
  */
+
+const POLL_INTERVAL_MS = 1500;
+const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+
+export type TelegramLoginState = "idle" | "pending" | "error" | "expired";
+
+interface LinkResponse {
+  token: string;
+  deepLink: string;
+}
+
 export function useTelegramLoginWidget() {
   const [state, setState] = useState<TelegramLoginState>("idle");
+  /** Shown as a fallback when the popup was blocked, so there's always a way through. */
+  const [deepLink, setDeepLink] = useState<string | null>(null);
+  const stopRef = useRef(false);
 
-  useEffect(() => {
-    if (BOT_ID) void loadWidgetScript().catch(() => setState("error"));
-  }, []);
+  useEffect(
+    () => () => {
+      stopRef.current = true;
+    },
+    [],
+  );
 
   const login = useCallback(() => {
-    if (!BOT_ID) {
-      setState("error");
-      return;
-    }
     setState("pending");
-    loadWidgetScript()
-      .then(
-        () =>
-          new Promise<string>((resolve, reject) => {
-            window.Telegram!.Login.auth({ client_id: BOT_ID, scope: ["profile"] }, (data) => {
-              if (!data || !data.id_token) {
-                reject(new Error("login cancelled or failed"));
-                return;
-              }
-              resolve(data.id_token);
-            });
-          }),
-      )
-      .then((idToken) =>
-        fetch("/api/auth/telegram-login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ idToken }),
-        }),
-      )
-      .then((res) => {
-        if (!res.ok) throw new Error("server rejected login");
-        // Simplest correct way to re-run every provider (ProfileProvider
-        // especially) against the now-real session cookie, instead of
-        // threading a "just logged in" state through the whole app.
-        window.location.reload();
-      })
-      .catch(() => setState("error"));
+    setDeepLink(null);
+    stopRef.current = false;
+
+    // Opened synchronously with the click: browsers only allow window.open
+    // from a real user gesture, and awaiting the fetch first would lose it.
+    const popup = window.open("", "_blank");
+
+    void (async () => {
+      try {
+        const linkRes = await fetch("/api/auth/link", { method: "POST", credentials: "include" });
+        if (!linkRes.ok) throw new Error("link failed");
+        const { token, deepLink: link } = (await linkRes.json()) as LinkResponse;
+
+        setDeepLink(link);
+        if (popup && !popup.closed) popup.location.href = link;
+
+        const deadline = Date.now() + POLL_TIMEOUT_MS;
+        while (!stopRef.current && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+          if (stopRef.current) return;
+
+          const pollRes = await fetch(`/api/auth/poll?token=${encodeURIComponent(token)}`, {
+            credentials: "include",
+          });
+          if (!pollRes.ok) continue;
+          const { status } = (await pollRes.json()) as { status: "pending" | "completed" | "expired" };
+
+          if (status === "completed") {
+            popup?.close();
+            // Simplest correct way to re-run every provider (ProfileProvider
+            // especially) against the now-real session cookie.
+            window.location.reload();
+            return;
+          }
+          if (status === "expired") {
+            setState("expired");
+            return;
+          }
+        }
+        if (!stopRef.current) setState("expired");
+      } catch {
+        popup?.close();
+        if (!stopRef.current) setState("error");
+      }
+    })();
   }, []);
 
-  return { state, login, configured: Boolean(BOT_ID) };
+  return { state, login, deepLink, configured: true };
 }
