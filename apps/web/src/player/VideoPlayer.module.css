@@ -59,6 +59,42 @@
   border: 0;
 }
 
+/* Full-cover "tap to watch" layer, shown when this browser's autoplay policy
+   refused to start the video (a guest who hasn't touched the player). One tap
+   inside this gesture unblocks playback for the session. */
+.playGate {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 0;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Small caption pinned bottom-left — stream error text. */
+.sourceNote {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 4;
+  max-width: calc(100% - 16px);
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
+  pointer-events: none;
+}
+
 /* Placeholder shown in the player's slot while a library video is still
    importing (or its import failed) — no <video> to render yet. */
 .libraryStatus {

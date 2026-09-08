@@ -70,18 +70,6 @@
   justify-content: center;
   gap: 28px;
 }
-/* Only the host's play/pause/seek/skip reach the server — everyone else's
-   would look like it worked (an optimistic local play/pause) then get no
-   correction back until some unrelated sync event happened to arrive.
-   Dimming these for non-hosts sets the right expectation up front instead
-   of a control that quietly does nothing. */
-.centerControls[data-host="false"] {
-  opacity: 0.4;
-}
-
-.seekRow[data-host="false"] {
-  opacity: 0.5;
-}
 
 .playButton {
   width: 60px;

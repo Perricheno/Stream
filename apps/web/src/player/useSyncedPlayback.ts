@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { computeExpectedPosition, ECHO_SUPPRESSION_MS } from "@stream/shared";
 import type { PlaybackState, PlaybackSyncPayload } from "@stream/shared";
 import type { RoomSocket } from "../socket/socketClient";
 import type { PlayerHandle } from "./playerTypes";
+import { planPlaybackCorrection } from "./playbackCorrection";
 import { syncLog } from "./syncLog";
 import { useServerClock } from "./useServerClock";
 
@@ -30,6 +31,16 @@ export interface SyncedPlayback {
    *  rewinding everyone else's synced position by that same gap the moment
    *  that late event arrives. */
   startPlaybackNow: (atSeconds: number) => void;
+  /** True when the room is playing but this browser refused to start the
+   *  video without a gesture (autoplay policy), or drift correction gave up
+   *  after repeated no-op seeks against a stuck-paused player. VideoPlayer
+   *  shows a full-cover "tap to watch" layer; tapping it calls retryPlay
+   *  inside the gesture, which is enough to unlock playback for the session. */
+  playBlocked: boolean;
+  /** The adapter reported NotAllowedError up — flip the gate on. */
+  notePlayBlocked: () => void;
+  /** Called from the "tap to watch" layer's click handler. */
+  retryPlay: () => void;
 }
 
 /** Below this, do nothing at all — avoids chasing ordinary getCurrentTime()
@@ -101,6 +112,18 @@ const STEADY_STATE_SUPPRESSION_MS = 500;
  *  event, sometimes more), so this covers the whole cascade by time instead
  *  of trying to guess how many events it produces. */
 const COLD_START_SUPPRESSION_MS = 4000;
+/** Minimum gap between re-issuing the same play/pause command when the
+ *  player's actual state still doesn't match what the room wants — often
+ *  enough to catch a lost first play, rare enough not to hammer the element
+ *  (or keep extending the suppression window). */
+const COMMAND_RETRY_MS = 2000;
+/** After this many consecutive hard seeks that didn't move the player at all
+ *  (it's stuck — usually paused because play() was blocked), stop seeking and
+ *  raise the "tap to watch" gate instead of dragging the frame once a second. */
+const MAX_INEFFECTIVE_SEEKS = 3;
+/** How long the tab has to stay hidden before we pause the room for it — a
+ *  quick app-switch / notification-shade peek shouldn't stop everyone. */
+const AWAY_PAUSE_DELAY_MS = 2000;
 
 /**
  * Bridges a `VideoPlayer` and the room socket: applies incoming `playback:sync`
@@ -125,6 +148,10 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
   // fresh player mount ensures the first real sync is never treated as "no
   // change needed".
   const lastCommandedPlayingRef = useRef<boolean | null>(null);
+  const commandRetryAtRef = useRef(0);
+  const ineffectiveSeekRef = useRef({ count: 0, lastCurrent: -1 });
+  const [playBlocked, setPlayBlocked] = useState(false);
+  const playBlockedRef = useRef(false);
   const preBackgroundSuppressedRef = useRef(0);
   // Whether this player has ever received a forced, snap-to-position sync.
   // A `library` video's player only mounts once its import finishes and a
@@ -145,6 +172,36 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
   }, []);
 
   useEffect(() => stopSoftCorrection, [stopSoftCorrection]);
+
+  const raisePlayGate = useCallback(() => {
+    if (playBlockedRef.current) return;
+    playBlockedRef.current = true;
+    stopSoftCorrection();
+    setPlayBlocked(true);
+  }, [stopSoftCorrection]);
+
+  const clearPlayGate = useCallback(() => {
+    if (!playBlockedRef.current) return;
+    playBlockedRef.current = false;
+    ineffectiveSeekRef.current = { count: 0, lastCurrent: -1 };
+    setPlayBlocked(false);
+  }, []);
+
+  const notePlayBlocked = useCallback(() => raisePlayGate(), [raisePlayGate]);
+
+  const retryPlay = useCallback(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    syncLog("play-gate:retry");
+    // This runs inside the layer's click handler, so the browser treats it
+    // as a user gesture and unblocks playback for the rest of the session.
+    void player
+      .play()
+      .then(() => clearPlayGate())
+      .catch(() => {
+        /* still blocked (or a real error) — leave the gate up */
+      });
+  }, [clearPlayGate]);
 
   const onBuffering = useCallback(
     (isBuffering: boolean) => {
@@ -187,115 +244,115 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
     // loads. Once it has loaded, its own real position takes over here
     // immediately (the next recheck is at most PERIODIC_RECHECK_MS away).
     const hasLoaded = player.hasLoadedMetadata();
+    const playerPaused = hasLoaded && player.isPaused();
+    const duration = player.getDuration();
+    const rawExpected = computeExpectedPosition(payload, serverNow());
+    const expected = duration > 0 ? Math.min(rawExpected, duration) : rawExpected;
+    const current = player.getCurrentTime();
 
-    // A genuine network stall: seeking or nudging the rate while the player
-    // is already starved for data just restarts its buffering at a new
-    // position, risking a stall-seek-stall loop instead of letting the
-    // browser recover on its own. play()/pause() below still always reflect
-    // the real command regardless — only the drift-closing part backs off.
-    if (isBufferingRef.current || !hasLoaded) {
-      syncLog("apply:defer-correction", { buffering: isBufferingRef.current, hasLoaded });
-    }
+    // Playback is genuinely running again (host resumed, or the tap worked) —
+    // drop the "tap to watch" gate.
+    if (playBlockedRef.current && hasLoaded && !playerPaused) clearPlayGate();
 
-    if (!isBufferingRef.current && hasLoaded) {
-      // Clamp to the video's real length: the shared timeline keeps advancing
-      // `positionSeconds` from a server timestamp with no knowledge of
-      // duration, so once a video plays past its end with nothing next in the
-      // queue, an unclamped "expected" grows without bound and this code
-      // hard-seeks the player past the end every recheck.
-      const duration = player.getDuration();
-      const rawExpected = computeExpectedPosition(payload, serverNow());
-      const expected = duration > 0 ? Math.min(rawExpected, duration) : rawExpected;
-      const atEnd = duration > 0 && rawExpected >= duration - 0.25;
-      const current = player.getCurrentTime();
-      const drift = current - expected;
-      const absDrift = Math.abs(drift);
-      syncLog("apply:drift", {
-        isPlaying: payload.isPlaying,
-        current: round(current),
-        expected: round(expected),
-        rawExpected: round(rawExpected),
-        duration: round(duration),
-        drift: round(drift),
-        forceSeek,
-        atEnd,
-      });
+    const plan = planPlaybackCorrection({
+      roomIsPlaying: payload.isPlaying,
+      hasLoaded,
+      isBuffering: isBufferingRef.current,
+      playerPaused,
+      playBlocked: playBlockedRef.current,
+      current,
+      expected,
+      atEnd: duration > 0 && rawExpected >= duration - 0.25,
+      forceSeek,
+      lastCommandedPlaying: lastCommandedPlayingRef.current,
+      msSinceLastCommand: Date.now() - commandRetryAtRef.current,
+      commandRetryMs: COMMAND_RETRY_MS,
+      driftDeadzoneSeconds: DRIFT_DEADZONE_SECONDS,
+      softCorrectionMaxSeconds: SOFT_CORRECTION_MAX_SECONDS,
+    });
 
+    syncLog("apply", {
+      isPlaying: payload.isPlaying,
+      current: round(current),
+      expected: round(expected),
+      drift: round(current - expected),
+      hasLoaded,
+      playerPaused,
+      playStalled: plan.playStalled,
+      drift_action: plan.drift,
+      command: plan.command,
+      forceSeek,
+    });
+
+    // --- position correction ---
+    if (plan.drift === "atEnd") {
       // The room thinks it's still playing but the video has run out — don't
-      // fight the ended player with seeks/rate nudges; just let it sit.
-      if (atEnd) {
-        syncLog("apply:at-end", { current: round(current), duration: round(duration) });
-        stopSoftCorrection();
-        lastCommandedPlayingRef.current = false;
+      // fight the finished player with seeks/rate nudges; just let it sit.
+      stopSoftCorrection();
+      lastCommandedPlayingRef.current = false;
+      return;
+    }
+    if (plan.drift === "seek") {
+      // Give up seeking if it keeps landing on the same spot — the player
+      // isn't actually consuming time (stuck paused, usually a blocked
+      // play()), so a once-a-second seek is just the slideshow again.
+      const stuck = ineffectiveSeekRef.current;
+      if (!forceSeek && Math.abs(current - stuck.lastCurrent) < 0.25) stuck.count += 1;
+      else stuck.count = 0;
+      stuck.lastCurrent = current;
+      if (stuck.count >= MAX_INEFFECTIVE_SEEKS) {
+        syncLog("correct:seek-ineffective", { stuckAt: round(current), target: round(expected) });
+        raisePlayGate();
         return;
       }
-
-      if (forceSeek || absDrift > SOFT_CORRECTION_MAX_SECONDS) {
-        syncLog("correct:seek", { from: round(current), to: round(expected), reason: forceSeek ? "force" : "far-drift" });
-        // Too far off for a rate nudge to close in reasonable time — jump.
-        // Also always true for the very first sync a freshly-mounted player
-        // gets (join, or switching videos): there's no continuous playback
-        // experience to protect yet, so even a sub-5s gap should snap
-        // immediately instead of crawling shut over tens of seconds — a
-        // guest joining mid-playback must start dead-on, not slowly drift
-        // into sync while visibly lagging the whole time.
-        //
-        // Cold-start window, not the steady-state one: seeking to a not-yet-
-        // buffered position can trigger a rebuffer-then-resume cascade of its
-        // own, regardless of whether the player has loaded before.
-        suppressed.current = Date.now() + COLD_START_SUPPRESSION_MS;
-        player.seekTo(expected);
-      } else if (absDrift > DRIFT_DEADZONE_SECONDS && payload.isPlaying) {
-        // Gently speed up/slow down instead of a hard jump-cut — the whole
-        // point being nobody notices this happening, unlike a visible seek.
-        const rateDelta = player.supportsFinePlaybackRate()
-          ? correctionRateDelta(absDrift)
-          : COARSE_CORRECTION_RATE_DELTA;
-        const rate = drift < 0 ? 1 + rateDelta : 1 - rateDelta;
-        syncLog("correct:rate", { drift: round(drift), rate: round(rate) });
-        player.setPlaybackRate(rate);
-        correctionInterval.current = setInterval(() => {
-          if (isBufferingRef.current) return;
-          const current = playerRef.current;
-          if (!current) {
-            stopSoftCorrection();
-            return;
-          }
-          const stillExpected = computeExpectedPosition(payload, serverNow());
-          if (Math.abs(current.getCurrentTime() - stillExpected) <= SOFT_CORRECTION_SETTLE_SECONDS) {
-            stopSoftCorrection();
-          }
-        }, SOFT_CORRECTION_CHECK_MS);
-      }
+      syncLog("correct:seek", { from: round(current), to: round(expected), reason: forceSeek ? "force" : "far-drift" });
+      // Cold-start window, not the steady-state one: seeking to a not-yet-
+      // buffered position can trigger a rebuffer-then-resume cascade.
+      suppressed.current = Date.now() + COLD_START_SUPPRESSION_MS;
+      player.seekTo(expected);
+    } else if (plan.drift === "rate") {
+      ineffectiveSeekRef.current.count = 0;
+      const absDrift = Math.abs(current - expected);
+      const rateDelta = player.supportsFinePlaybackRate() ? correctionRateDelta(absDrift) : COARSE_CORRECTION_RATE_DELTA;
+      const rate = current - expected < 0 ? 1 + rateDelta : 1 - rateDelta;
+      syncLog("correct:rate", { drift: round(current - expected), rate: round(rate) });
+      player.setPlaybackRate(rate);
+      correctionInterval.current = setInterval(() => {
+        if (isBufferingRef.current) return;
+        const p = playerRef.current;
+        if (!p) {
+          stopSoftCorrection();
+          return;
+        }
+        const stillExpected = computeExpectedPosition(payload, serverNow());
+        if (Math.abs(p.getCurrentTime() - stillExpected) <= SOFT_CORRECTION_SETTLE_SECONDS) stopSoftCorrection();
+      }, SOFT_CORRECTION_CHECK_MS);
     }
 
-    // Only re-issue play()/pause() on a real transition — applyServerState
-    // re-runs on every periodic recheck with an unchanged isPlaying, and
-    // re-sending it every tick would extend the suppression window forever,
-    // permanently swallowing this client's own future local actions. See
-    // lastCommandedPlayingRef's doc comment.
-    if (lastCommandedPlayingRef.current !== payload.isPlaying) {
-      const isFirstCommand = lastCommandedPlayingRef.current === null;
+    // --- play()/pause() (re)issue ---
+    if (plan.command) {
       lastCommandedPlayingRef.current = payload.isPlaying;
+      commandRetryAtRef.current = Date.now();
       const window = hasLoaded ? STEADY_STATE_SUPPRESSION_MS : COLD_START_SUPPRESSION_MS;
-      syncLog("command", { to: payload.isPlaying ? "play" : "pause", hasLoaded, isFirstCommand });
-      if (payload.isPlaying) {
-        suppressed.current = Date.now() + window;
-        player.play();
-      } else if (!isFirstCommand) {
-        // A freshly-mounted player already starts paused (no autoplay
-        // attribute is ever set) — an explicit pause() for the very first
-        // sync wouldn't change anything anyway, but CAN race a host's
-        // near-simultaneous autoplay effect (RoomScreen.tsx's own
-        // startPlaybackNow call): both queue against the same not-yet-
-        // loaded element, and their relative execution order once it
-        // finally loads isn't something to rely on — losing that race
-        // left the video paused indefinitely instead of autoplaying.
-        suppressed.current = Date.now() + window;
+      syncLog(plan.isRetry ? "command:retry" : "command", {
+        to: plan.command,
+        hasLoaded,
+        isFirstCommand: plan.isFirstCommand,
+      });
+      suppressed.current = Date.now() + window;
+      if (plan.command === "play") {
+        void player.play().catch(() => {
+          // NotAllowedError → the adapter raised the gate via onPlayBlocked.
+        });
+      } else {
         player.pause();
       }
+    } else if (plan.isFirstCommand && lastCommandedPlayingRef.current === null) {
+      // First sync, room paused, nothing to command — but record that we've
+      // now "seen" the desired state so a later real transition still fires.
+      lastCommandedPlayingRef.current = payload.isPlaying;
     }
-  }, [stopSoftCorrection, serverNow]);
+  }, [stopSoftCorrection, serverNow, clearPlayGate, raisePlayGate]);
 
   /**
    * Going away pauses the room for everyone.
@@ -320,23 +377,36 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
    * are still watching and nothing should stop.
    */
   useEffect(() => {
+    let awayTimer: ReturnType<typeof setTimeout> | undefined;
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         if (document.pictureInPictureElement) return;
         preBackgroundSuppressedRef.current = suppressed.current;
         suppressed.current = Infinity;
-        if (lastKnownStateRef.current?.isPlaying) {
-          syncLog("away:request-pause");
-          socket.emit("playback:request-pause", { reason: "away" });
-        }
+        // Don't pause the room for a quick tab flick — only if we're still
+        // gone a couple of seconds later (a real "switched away").
+        if (awayTimer) clearTimeout(awayTimer);
+        awayTimer = setTimeout(() => {
+          if (document.visibilityState === "hidden" && lastKnownStateRef.current?.isPlaying) {
+            syncLog("away:request-pause");
+            socket.emit("playback:request-pause", { reason: "away" });
+          }
+        }, AWAY_PAUSE_DELAY_MS);
         return;
+      }
+      if (awayTimer) {
+        clearTimeout(awayTimer);
+        awayTimer = undefined;
       }
       suppressed.current = preBackgroundSuppressedRef.current;
       const state = lastKnownStateRef.current;
       if (state) applyServerState(state, true);
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (awayTimer) clearTimeout(awayTimer);
+    };
   }, [applyServerState, socket]);
 
   useEffect(() => {
@@ -463,15 +533,18 @@ export function useSyncedPlayback(socket: RoomSocket, initialPlayback: PlaybackS
       // before that gate kicks in, it sees "already commanded" and doesn't
       // double up — see lastCommandedPlayingRef's doc comment.
       lastCommandedPlayingRef.current = true;
+      commandRetryAtRef.current = Date.now();
       // Cold-start window — this is always a fresh, not-yet-loaded player by
       // definition (see this function's own doc comment).
       suppressed.current = Date.now() + COLD_START_SUPPRESSION_MS;
       syncLog("startPlaybackNow", { atSeconds: round(atSeconds) });
-      player.play();
+      void player.play().catch(() => {
+        // NotAllowedError → adapter raised the gate via onPlayBlocked.
+      });
       emit("play", atSeconds);
     },
     [emit],
   );
 
-  return { playerRef, suppressed, onPlay, onPause, onSeek, onBuffering, startPlaybackNow };
+  return { playerRef, suppressed, onPlay, onPause, onSeek, onBuffering, startPlaybackNow, playBlocked, notePlayBlocked, retryPlay };
 }

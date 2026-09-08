@@ -19,7 +19,14 @@ export interface PlayerHandle {
    *  toward a growing target, queuing conflicting commands that fight each
    *  other the moment it finally does load. */
   hasLoadedMetadata(): boolean;
-  play(): void;
+  /** Resolves when playback actually started; rejects (usually
+   *  `NotAllowedError`) when the browser's autoplay policy blocked it —
+   *  which happens to anyone who hasn't tapped this player yet, e.g. a guest
+   *  the moment a video is loaded for them. Callers must handle the
+   *  rejection; the adapter also reports a `NotAllowedError` up via
+   *  `onPlayBlocked` so a single place (VideoPlayer) can show the "tap to
+   *  watch" gate regardless of which caller triggered the play. */
+  play(): Promise<void>;
   pause(): void;
   seekTo(seconds: number): void;
   getCurrentTime(): number;
@@ -48,6 +55,14 @@ export interface PlayerAdapterEvents {
   onSeek(atSeconds: number): void;
   /** Fired once when playback reaches the end — drives queue auto-advance. */
   onEnded(): void;
+  /** The browser refused a play() call under its autoplay policy
+   *  (`NotAllowedError`). The viewer has to make a gesture on the player
+   *  itself before it will start — VideoPlayer shows a full-cover "tap to
+   *  watch" layer in response. */
+  onPlayBlocked(): void;
+  /** A hard <video> error (network failure, unsupported source, an expired
+   *  stream token that 401s). `code` is HTMLMediaError.code (1–4). */
+  onError(code: number, message: string): void;
   /** Genuine network/buffering stall, not a user or sync action — lets the
    *  sync layer back off drift correction instead of fighting the browser's
    *  own recovery (seeking a stalled player just restarts buffering at a new

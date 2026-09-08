@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { VideoSource } from "@stream/shared";
 import { api } from "../api/apiClient";
 import { getStreamUrl, getVideo, type LibraryVideo } from "../api/videoApi";
@@ -11,9 +11,14 @@ export interface LibraryVideoState {
   /** Set once status is "ready" — a `file` source pointing at the signed
    *  stream URL, ready to hand straight to Html5PlayerAdapter. */
   fileSource?: Extract<VideoSource, { type: "file" }>;
+  /** Fetch a fresh stream token and swap it into `fileSource.url` (same
+   *  path, so Html5PlayerAdapter reloads in place and keeps position). Call
+   *  when the stream 401s mid-playback — the token lives 2h. Throttled. */
+  remint: () => void;
 }
 
 const POLL_INTERVAL_MS = 2000;
+const REMINT_MIN_GAP_MS = 5000;
 
 /**
  * Turns a `library` VideoSource into something playable: polls the import
@@ -23,8 +28,10 @@ const POLL_INTERVAL_MS = 2000;
  * the token 401s mid-playback (expired).
  */
 export function useLibraryVideo(videoId: string): LibraryVideoState {
-  const [state, setState] = useState<LibraryVideoState>({ status: "loading", progressPercent: 0 });
+  const [state, setState] = useState<Omit<LibraryVideoState, "remint">>({ status: "loading", progressPercent: 0 });
   const cancelled = useRef(false);
+  const lastRemintAtRef = useRef(0);
+  const titleRef = useRef("");
 
   useEffect(() => {
     // Called with "" for every non-library source (hooks can't be
@@ -37,6 +44,7 @@ export function useLibraryVideo(videoId: string): LibraryVideoState {
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const resolveReady = async (video: LibraryVideo) => {
+      titleRef.current = video.title;
       try {
         const { token } = await api.get<{ token: string }>(`/videos/${videoId}/stream-token`);
         if (cancelled.current) return;
@@ -84,5 +92,27 @@ export function useLibraryVideo(videoId: string): LibraryVideoState {
     };
   }, [videoId]);
 
-  return state;
+  const remint = useCallback(() => {
+    if (!videoId) return;
+    const now = Date.now();
+    if (now - lastRemintAtRef.current < REMINT_MIN_GAP_MS) return;
+    lastRemintAtRef.current = now;
+    api
+      .get<{ token: string }>(`/videos/${videoId}/stream-token`)
+      .then(({ token }) => {
+        if (cancelled.current) return;
+        setState((prev) =>
+          prev.status === "ready"
+            ? { ...prev, fileSource: { type: "file", url: getStreamUrl(videoId, token), kind: "mp4" } }
+            : prev,
+        );
+      })
+      .catch(() => {
+        if (!cancelled.current) {
+          setState({ status: "failed", progressPercent: 100, title: titleRef.current, errorMessage: "stream unavailable" });
+        }
+      });
+  }, [videoId]);
+
+  return { ...state, remint };
 }

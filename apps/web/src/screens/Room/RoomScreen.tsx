@@ -316,7 +316,9 @@ export function RoomScreen({ roomId, onExit, initialVideoId }: RoomScreenProps) 
                 onSeek={synced.onSeek}
                 onEnded={handleEnded}
                 onBuffering={synced.onBuffering}
-                isHost={isHost}
+                playBlocked={synced.playBlocked}
+                onPlayBlocked={synced.notePlayBlocked}
+                onRetryPlay={synced.retryPlay}
                 onFullscreenChange={handleFullscreenChange}
                 shrinkForChat={chatSidebarOpen}
               />

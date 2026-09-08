@@ -13,15 +13,17 @@ import { useTranslation } from "../i18n/useTranslation";
 import type { PlayerAdapterEvents, PlayerHandle } from "./playerTypes";
 import styles from "./VideoPlayer.module.css";
 
-interface VideoPlayerProps extends PlayerAdapterEvents {
+interface VideoPlayerProps extends Omit<PlayerAdapterEvents, "onPlayBlocked" | "onError"> {
   source: VideoSource;
   suppressed: React.MutableRefObject<number>;
   playerRef: RefObject<PlayerHandle>;
-  /** Only the host's play/pause/seek/skip actually move the shared state (see
-   *  registerSocketHandlers.ts) — a non-host's tap would otherwise optimistically
-   *  pause/seek their OWN player locally with nothing to correct it back until
-   *  the next unrelated sync event happens to arrive. */
-  isHost: boolean;
+  /** True when this browser's autoplay policy refused to start the video —
+   *  shows a full-cover "tap to watch" layer. From useSyncedPlayback. */
+  playBlocked: boolean;
+  /** The adapter caught a NotAllowedError — raise the gate. */
+  onPlayBlocked: () => void;
+  /** The "tap to watch" layer was clicked — retry play() inside the gesture. */
+  onRetryPlay: () => void;
   /** Our own CSS-only "fullscreen" (expand to fill the viewport) is toggled
    *  internally, but RoomScreen needs to know when it's active to offer a
    *  chat-sidebar toggle over it — there's no room left for the normally
@@ -44,19 +46,39 @@ export function VideoPlayer({
   onSeek,
   onEnded,
   onBuffering,
-  isHost,
+  playBlocked,
+  onPlayBlocked,
+  onRetryPlay,
   onFullscreenChange,
   shrinkForChat,
 }: VideoPlayerProps) {
   const { t } = useTranslation();
   const progress = usePlayerProgress(playerRef);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const events = { onPlay, onPause, onSeek, onEnded, onBuffering };
+  const [streamError, setStreamError] = useState<string | null>(null);
 
   // A `library` video isn't playable until its import job finishes — this
   // polls the job and, once ready, hands back a `file` source pointing at
   // the signed stream URL. No-ops for every other source type.
   const library = useLibraryVideo(source.type === "library" ? source.videoId : "");
+
+  const handleError = (code: number, message: string) => {
+    // 2 = network, 4 = src not supported — both are what a 401/403 body (an
+    // expired stream token) looks like to <video>. For a library source, ask
+    // for a fresh token and reload in place, keeping position (§2.7).
+    if (source.type === "library" && (code === 2 || code === 4)) {
+      setStreamError(null);
+      library.remint();
+      return;
+    }
+    setStreamError(message ? `${t("streamError")}: ${message}` : t("streamError"));
+  };
+  // A successful reload clears any lingering error note.
+  useEffect(() => {
+    if (progress.isPlaying) setStreamError(null);
+  }, [progress.isPlaying]);
+
+  const events = { onPlay, onPause, onSeek, onEnded, onBuffering, onPlayBlocked, onError: handleError };
   const html5Source: Extract<VideoSource, { type: "file" }> | undefined =
     source.type === "file" ? source : source.type === "library" ? library.fileSource : undefined;
   const hasPlayer = source.type === "youtube" || source.type === "vimeo" || html5Source !== undefined;
@@ -70,7 +92,7 @@ export function VideoPlayer({
   // YouTube/Vimeo's own iframe already manages MediaSession internally once
   // playing — only the HTML5 (direct file/HLS/library) adapter has a real
   // <video> element with nothing already driving this for it.
-  usePlayerMediaSession({ enabled: html5Source !== undefined, playerRef, isHost, title: "Stream" });
+  usePlayerMediaSession({ enabled: html5Source !== undefined, playerRef, title: "Stream" });
 
   // Notified as an effect, not from inside the setIsFullscreen updater —
   // calling the parent's setState synchronously during this component's own
@@ -116,11 +138,21 @@ export function VideoPlayer({
           progress={progress}
           isFullscreen={isFullscreen}
           onToggleFullscreen={toggleFullscreen}
-          isHost={isHost}
           documentPipSupported={documentPip.supported}
           onToggleDocumentPip={documentPip.toggle}
         />
       )}
+
+      {hasPlayer && playBlocked && (
+        <button type="button" className={styles.playGate} onClick={onRetryPlay}>
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+            <path d="M8 5v14l11-7z" />
+          </svg>
+          <span>{t("tapToWatch")}</span>
+        </button>
+      )}
+
+      {streamError && <span className={styles.sourceNote}>{streamError}</span>}
     </div>
   );
 

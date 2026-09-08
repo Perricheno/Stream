@@ -106,13 +106,6 @@ interface VideoControlsOverlayProps {
   progress: PlayerProgress;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
-  /** Only the host's play/pause/seek/skip reach the server (see
-   *  registerSocketHandlers.ts) — everyone else gets those controls dimmed
-   *  and inert instead of a tap that visually "works" locally but never
-   *  actually moves the shared state, and would otherwise leave their own
-   *  player paused/seeked out of step with everyone else's until the next
-   *  unrelated correction happened to arrive. */
-  isHost: boolean;
   /** Document Picture-in-Picture (floats this whole overlay + player above
    *  every window, any source type) — preferred over the plain <video> PiP
    *  below when available. See useDocumentPictureInPicture.ts. */
@@ -125,7 +118,6 @@ export function VideoControlsOverlay({
   progress,
   isFullscreen,
   onToggleFullscreen,
-  isHost,
   documentPipSupported,
   onToggleDocumentPip,
 }: VideoControlsOverlayProps) {
@@ -257,35 +249,29 @@ export function VideoControlsOverlay({
   }, []);
 
   const togglePlayPause = useCallback(() => {
-    if (!isHost) {
-      showControls();
-      return;
-    }
     const player = playerRef.current;
     if (!player) return;
     if (player.isPaused()) {
-      player.play();
+      void player.play().catch(() => {
+        // NotAllowedError → the adapter raises the "tap to watch" gate.
+      });
       setOptimisticPlaying(true);
     } else {
       player.pause();
       setOptimisticPlaying(false);
     }
     showControls();
-  }, [isHost, playerRef, showControls]);
+  }, [playerRef, showControls]);
 
   const skip = useCallback(
     (deltaSeconds: number) => {
-      if (!isHost) {
-        showControls();
-        return;
-      }
       const player = playerRef.current;
       if (!player) return;
       const target = Math.min(Math.max(player.getCurrentTime() + deltaSeconds, 0), progress.duration || Infinity);
       player.seekTo(target);
       showControls();
     },
-    [isHost, playerRef, progress.duration, showControls],
+    [playerRef, progress.duration, showControls],
   );
 
   const handleFullscreenClick = useCallback(() => {
@@ -342,17 +328,16 @@ export function VideoControlsOverlay({
         </div>
       </div>
       <div className={styles.controlsGroup} data-visible={visible}>
-        <div className={styles.centerControls} data-host={isHost}>
+        <div className={styles.centerControls}>
           <button
             type="button"
             className={styles.skipButton}
             onClick={() => skip(-SEEK_SKIP_SECONDS)}
             aria-label="Назад на 10 секунд"
-            disabled={!isHost}
           >
             <SkipBackIcon />
           </button>
-          <button type="button" className={styles.playButton} onClick={togglePlayPause} aria-label="Play/Pause" disabled={!isHost}>
+          <button type="button" className={styles.playButton} onClick={togglePlayPause} aria-label="Play/Pause">
             {isPlaying ? <PauseIcon /> : <PlayIcon />}
           </button>
           <button
@@ -360,13 +345,12 @@ export function VideoControlsOverlay({
             className={styles.skipButton}
             onClick={() => skip(SEEK_SKIP_SECONDS)}
             aria-label="Вперёд на 10 секунд"
-            disabled={!isHost}
           >
             <SkipForwardIcon />
           </button>
         </div>
         <div className={styles.bottomBar}>
-          <div className={styles.seekRow} data-host={isHost}>
+          <div className={styles.seekRow}>
             <span className={styles.time}>{formatTime(displayedTime)}</span>
             <input
               type="range"
@@ -375,12 +359,8 @@ export function VideoControlsOverlay({
               max={progress.duration || 0}
               step={0.5}
               value={displayedTime}
-              disabled={!isHost}
-              onChange={(event) => {
-                if (isHost) setDragValue(Number(event.target.value));
-              }}
+              onChange={(event) => setDragValue(Number(event.target.value))}
               onPointerUp={(event) => {
-                if (!isHost) return;
                 const value = Number((event.target as HTMLInputElement).value);
                 playerRef.current?.seekTo(value);
                 setDragValue(null);

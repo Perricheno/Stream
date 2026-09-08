@@ -10,10 +10,6 @@ interface UsePlayerMediaSessionOptions {
    *  MediaSession internally once playing, and this must not fight that. */
   enabled: boolean;
   playerRef: RefObject<PlayerHandle>;
-  /** Only the host's actions may move the shared room state (same rule as
-   *  VideoControlsOverlay) — a non-host still gets the title in lock-screen/
-   *  OS media UI, just no play/pause/seek action handlers wired to it. */
-  isHost: boolean;
   title: string;
 }
 
@@ -25,24 +21,24 @@ interface UsePlayerMediaSessionOptions {
  * on top of (not instead of) the browser's own autoplay policy already
  * keeping an already-playing tab's video running when backgrounded.
  */
-export function usePlayerMediaSession({ enabled, playerRef, isHost, title }: UsePlayerMediaSessionOptions): void {
+export function usePlayerMediaSession({ enabled, playerRef, title }: UsePlayerMediaSessionOptions): void {
   useEffect(() => {
     if (!enabled || !("mediaSession" in navigator)) return;
 
     navigator.mediaSession.metadata = new MediaMetadata({ title });
 
-    if (isHost) {
-      navigator.mediaSession.setActionHandler("play", () => playerRef.current?.play());
-      navigator.mediaSession.setActionHandler("pause", () => playerRef.current?.pause());
-      navigator.mediaSession.setActionHandler("seekbackward", () => {
-        const player = playerRef.current;
-        if (player) player.seekTo(Math.max(0, player.getCurrentTime() - SEEK_SKIP_SECONDS));
-      });
-      navigator.mediaSession.setActionHandler("seekforward", () => {
-        const player = playerRef.current;
-        if (player) player.seekTo(Math.min(player.getDuration() || Infinity, player.getCurrentTime() + SEEK_SKIP_SECONDS));
-      });
-    }
+    // Any participant may drive playback now (§2.3), and an OS media key /
+    // lock-screen tap is a real user gesture, so wire them for everyone.
+    navigator.mediaSession.setActionHandler("play", () => void playerRef.current?.play().catch(() => {}));
+    navigator.mediaSession.setActionHandler("pause", () => playerRef.current?.pause());
+    navigator.mediaSession.setActionHandler("seekbackward", () => {
+      const player = playerRef.current;
+      if (player) player.seekTo(Math.max(0, player.getCurrentTime() - SEEK_SKIP_SECONDS));
+    });
+    navigator.mediaSession.setActionHandler("seekforward", () => {
+      const player = playerRef.current;
+      if (player) player.seekTo(Math.min(player.getDuration() || Infinity, player.getCurrentTime() + SEEK_SKIP_SECONDS));
+    });
 
     return () => {
       navigator.mediaSession.metadata = null;
@@ -51,5 +47,5 @@ export function usePlayerMediaSession({ enabled, playerRef, isHost, title }: Use
       navigator.mediaSession.setActionHandler("seekbackward", null);
       navigator.mediaSession.setActionHandler("seekforward", null);
     };
-  }, [enabled, isHost, playerRef, title]);
+  }, [enabled, playerRef, title]);
 }

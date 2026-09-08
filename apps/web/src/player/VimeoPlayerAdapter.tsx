@@ -13,15 +13,24 @@ interface VimeoPlayerAdapterProps extends PlayerAdapterEvents {
  *  wraps `@vimeo/player` internally but exposes a real HTMLVideoElement-
  *  compatible element — same rationale as YouTubePlayerAdapter.tsx. */
 export const VimeoPlayerAdapter = forwardRef<PlayerHandle, VimeoPlayerAdapterProps>(
-  function VimeoPlayerAdapter({ videoId, suppressed, onPlay, onPause, onSeek, onEnded, onBuffering }, ref) {
+  function VimeoPlayerAdapter({ videoId, suppressed, onPlay, onPause, onSeek, onEnded, onBuffering, onPlayBlocked, onError }, ref) {
     const elRef = useRef<VimeoVideoElement>(null);
+    const cbRef = useRef({ onPlayBlocked });
+    cbRef.current = { onPlayBlocked };
 
     useImperativeHandle(
       ref,
       () => ({
         isReady: () => elRef.current !== null,
         hasLoadedMetadata: () => (elRef.current?.readyState ?? 0) >= 1,
-        play: () => void elRef.current?.play(),
+        play: () => {
+          const p = elRef.current?.play();
+          if (!p) return Promise.resolve();
+          return p.catch((err: unknown) => {
+            if (err instanceof DOMException && err.name === "NotAllowedError") cbRef.current.onPlayBlocked();
+            throw err;
+          });
+        },
         pause: () => elRef.current?.pause(),
         seekTo: (seconds) => {
           if (elRef.current) elRef.current.currentTime = seconds;
@@ -64,6 +73,10 @@ export const VimeoPlayerAdapter = forwardRef<PlayerHandle, VimeoPlayerAdapterPro
       const handleEnded = () => onEnded();
       const handleWaiting = () => onBuffering(true);
       const handlePlaying = () => onBuffering(false);
+      const handleError = () => {
+        const err = el.error;
+        onError(err?.code ?? 4, err?.message || "Vimeo playback error");
+      };
 
       el.addEventListener("play", handlePlay);
       el.addEventListener("pause", handlePause);
@@ -71,6 +84,7 @@ export const VimeoPlayerAdapter = forwardRef<PlayerHandle, VimeoPlayerAdapterPro
       el.addEventListener("ended", handleEnded);
       el.addEventListener("waiting", handleWaiting);
       el.addEventListener("playing", handlePlaying);
+      el.addEventListener("error", handleError);
       return () => {
         el.removeEventListener("play", handlePlay);
         el.removeEventListener("pause", handlePause);
@@ -78,8 +92,9 @@ export const VimeoPlayerAdapter = forwardRef<PlayerHandle, VimeoPlayerAdapterPro
         el.removeEventListener("ended", handleEnded);
         el.removeEventListener("waiting", handleWaiting);
         el.removeEventListener("playing", handlePlaying);
+        el.removeEventListener("error", handleError);
       };
-    }, [onPlay, onPause, onSeek, onEnded, onBuffering, suppressed]);
+    }, [onPlay, onPause, onSeek, onEnded, onBuffering, onError, suppressed]);
 
     return (
       <Vimeo
