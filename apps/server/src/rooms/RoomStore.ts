@@ -25,13 +25,14 @@ export function getOrCreateRoom(roomId: string): Room {
   if (!room) {
     room = {
       id: roomId,
-      hostSocketId: "",
+      hostUserId: null,
       source: null,
       playback: initialPlayback(),
       members: [],
       messages: [],
       queue: [],
       emptyTimer: null,
+      disconnectTimers: new Map(),
     };
     rooms.set(roomId, room);
   }
@@ -57,8 +58,11 @@ export function getRoomCount(): number {
 export function listActiveRooms(): ActiveRoom[] {
   const result: ActiveRoom[] = [];
   for (const room of rooms.values()) {
-    const host = room.members.find((member) => member.socketId === room.hostSocketId);
-    if (!host) continue;
+    if (room.members.length === 0) continue;
+    // The nominal host may be momentarily absent (a reconnect blip within the
+    // disconnect grace) — fall back to the first present member so the room
+    // still shows up instead of blinking out of the active list.
+    const host = room.members.find((member) => member.userId === room.hostUserId) ?? room.members[0];
     result.push({
       roomId: room.id,
       hostUserId: host.userId,
@@ -92,34 +96,41 @@ export function addMember(room: Room, member: RoomMember): void {
     clearTimeout(room.emptyTimer);
     room.emptyTimer = null;
   }
+  // ...and any pending "did they really leave" timer for this user — they're
+  // back, so the room must not pause or reassign host on their account.
+  const pending = room.disconnectTimers.get(member.userId);
+  if (pending) {
+    clearTimeout(pending);
+    room.disconnectTimers.delete(member.userId);
+  }
 
-  // A reconnect gets a fresh socket id, so if this user was already the host
-  // under their previous connection, carry host status forward — otherwise
-  // `hostSocketId` would keep pointing at a now-dead socket and they'd
-  // silently lose host controls on every reconnect.
-  const wasHost = room.hostSocketId !== "" && room.members.some(
-    (existing) => existing.userId === member.userId && existing.socketId === room.hostSocketId,
-  );
   room.members = room.members.filter((existing) => existing.userId !== member.userId);
   room.members.push(member);
-  if (!room.hostSocketId || wasHost) room.hostSocketId = member.socketId;
+  // First person in claims host; a returning host is still the host (it's
+  // keyed by userId), so there's nothing to carry forward.
+  if (room.hostUserId === null) room.hostUserId = member.userId;
 }
 
 /**
- * Removes a member by socket id and promotes the next member to host if the
- * host left. A room with no members left isn't deleted immediately — it's
- * kept around for a grace period (see ROOM_EMPTY_GRACE_MS) so a brief
- * disconnect (network blip, the webview getting backgrounded) doesn't wipe
- * out the video, queue, and chat history from under someone about to
- * reconnect. Only torn down once the grace period elapses with still no one back.
+ * Promotes the next present member to host — call only once a departed host's
+ * disconnect grace has elapsed without them returning (see the socket
+ * handler), or on an explicit room:leave.
+ */
+export function promoteNextHost(room: Room): number | null {
+  room.hostUserId = room.members[0]?.userId ?? null;
+  logRoom("host:promoted", { room: room.id, newHostUserId: room.hostUserId, playback: room.playback });
+  return room.hostUserId;
+}
+
+/**
+ * Removes a member by socket id. Does NOT reassign host — that's deferred to
+ * the disconnect-grace timer in the socket handler so a backgrounding blip
+ * doesn't move the role. A room with no members left isn't deleted
+ * immediately either — it's kept for a grace period (ROOM_EMPTY_GRACE_MS) so
+ * a reconnect finds the video/queue/chat intact.
  */
 export function removeMember(room: Room, socketId: string): void {
   room.members = room.members.filter((member) => member.socketId !== socketId);
-  if (room.hostSocketId === socketId) {
-    room.hostSocketId = room.members[0]?.socketId ?? "";
-    const promoted = room.members.find((m) => m.socketId === room.hostSocketId);
-    logRoom("host:promoted", { room: room.id, newHostUserId: promoted?.userId ?? null, playback: room.playback });
-  }
   if (room.members.length === 0 && !room.emptyTimer) {
     logRoom("room:empty", { room: room.id, graceMs: ROOM_EMPTY_GRACE_MS });
     room.emptyTimer = setTimeout(() => {
@@ -140,7 +151,7 @@ export function toParticipants(room: Room): Participant[] {
     userId: member.userId,
     firstName: member.firstName,
     photoUrl: member.photoUrl,
-    isHost: member.socketId === room.hostSocketId,
+    isHost: member.userId === room.hostUserId,
   }));
 }
 

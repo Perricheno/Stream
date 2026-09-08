@@ -1,7 +1,8 @@
 /**
- * Exercises the real socket handlers with connected clients: host authority,
- * relay to peers, non-host rejection, host hand-off on leave, and seek
- * clamping. No mocks — a real socket.io server on an ephemeral port.
+ * Exercises the real socket handlers with connected clients: play/pause/seek
+ * open to every participant, last-write-by-server-time wins, host hand-off,
+ * pause semantics, and disconnect grace. No mocks — a real socket.io server
+ * on an ephemeral port.
  */
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
@@ -76,45 +77,45 @@ async function withClients(n: number, fn: (clients: C[]) => Promise<void>): Prom
 
 const roomId = () => `IT${randomUUID().replace(/-/g, "").slice(0, 8)}`.toUpperCase();
 
-test("host's play is relayed to the other participant with a server timestamp", { timeout: TIMEOUT }, () =>
+test("a play from either participant (not just the host) is relayed with a server timestamp", { timeout: TIMEOUT }, () =>
   withClients(2, async ([host, guest]) => {
     const id = roomId();
-    const hostJoin = await joinRoom(host, id);
-    await joinRoom(guest, id);
-    assert.equal(hostJoin.ok, true);
+    await joinRoom(host, id);
+    const guestJoin = await joinRoom(guest, id);
 
+    // The GUEST presses play — this used to be silently rejected (host-only).
     const relayed = once<{ isPlaying: boolean; positionSeconds: number; updatedAtServerTime: number; originUserId: number }>(
-      guest,
+      host,
       "playback:sync",
     );
     const t0 = Date.now();
-    host.emit("playback:play", { atSeconds: 5, clientTimestamp: Date.now() });
+    guest.emit("playback:play", { atSeconds: 5, clientTimestamp: Date.now() });
     const sync = await relayed;
 
     assert.equal(sync.isPlaying, true);
     assert.equal(sync.positionSeconds, 5);
-    assert.equal(sync.originUserId, hostJoin.yourUserId);
+    assert.equal(sync.originUserId, guestJoin.yourUserId);
     assert.ok(sync.updatedAtServerTime >= t0 && sync.updatedAtServerTime <= Date.now());
   }),
 );
 
-test("a non-host's play/pause is NOT relayed (host stays authoritative)", { timeout: TIMEOUT }, () =>
+test("two competing seeks resolve to the later one by server time", { timeout: TIMEOUT }, () =>
   withClients(2, async ([host, guest]) => {
     const id = roomId();
     await joinRoom(host, id);
     await joinRoom(guest, id);
 
-    let hostGotSomething = false;
-    host.on("playback:sync", () => {
-      hostGotSomething = true;
-    });
-    guest.emit("playback:pause", { atSeconds: 42, clientTimestamp: Date.now() });
-    await new Promise((r) => setTimeout(r, 300));
-    assert.equal(hostGotSomething, false);
+    host.emit("playback:seek", { atSeconds: 10, clientTimestamp: Date.now() });
+    await new Promise((r) => setTimeout(r, 60));
+    const relayed = once<{ positionSeconds: number }>(host, "playback:sync");
+    guest.emit("playback:seek", { atSeconds: 90, clientTimestamp: Date.now() });
+    const sync = await relayed;
+    // The guest's seek landed after the host's, so it wins.
+    assert.equal(sync.positionSeconds, 90);
   }),
 );
 
-test("when the host leaves, the guest is promoted and their play is authoritative", { timeout: TIMEOUT }, () =>
+test("when the host explicitly leaves, the next member is promoted and their play is authoritative", { timeout: TIMEOUT }, () =>
   withClients(3, async ([host, guest, late]) => {
     const id = roomId();
     await joinRoom(host, id);
@@ -132,6 +133,27 @@ test("when the host leaves, the guest is promoted and their play is authoritativ
     const sync = await relayed;
     assert.equal(sync.isPlaying, true);
     assert.equal(sync.positionSeconds, 12);
+  }),
+);
+
+test("a socket disconnect does NOT pause the room immediately (grace period)", { timeout: TIMEOUT }, () =>
+  withClients(2, async ([host, guest]) => {
+    const id = roomId();
+    await joinRoom(host, id);
+    await joinRoom(guest, id);
+
+    host.emit("playback:play", { atSeconds: 0, clientTimestamp: Date.now() });
+    await new Promise((r) => setTimeout(r, 200));
+
+    let paused = false;
+    host.on("playback:sync", (s: { isPlaying: boolean }) => {
+      if (!s.isPlaying) paused = true;
+    });
+    host.on("playback:paused-by", () => (paused = true));
+
+    guest.disconnect(); // a drop, not an explicit room:leave
+    await new Promise((r) => setTimeout(r, 800));
+    assert.equal(paused, false, "the 10s disconnect grace hasn't elapsed — room still playing");
   }),
 );
 

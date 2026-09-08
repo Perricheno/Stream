@@ -20,6 +20,7 @@ import {
   editChatMessage,
   getOrCreateRoom,
   getRoom,
+  promoteNextHost,
   removeMember,
   removeQueueItem,
   toParticipants,
@@ -32,9 +33,10 @@ import type { SocketData } from "./types";
 
 type StreamServer = Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
 
-function hostUserId(room: Room): number | null {
-  return room.members.find((m) => m.socketId === room.hostSocketId)?.userId ?? null;
-}
+/** How long after a socket `disconnect` before the room actually pauses and,
+ *  if it was the host who dropped, promotes the next person — a
+ *  backgrounding blip / network stutter reconnects well within this. */
+const DISCONNECT_GRACE_MS = 10_000;
 
 /**
  * Freezes the room at wherever the shared timeline has actually reached,
@@ -56,22 +58,13 @@ function pauseRoomNow(room: Room): boolean {
 }
 
 /**
- * Host-authoritative playback sync: the room's `playback` (position + isPlaying
- * + the server's own timestamp) is the one shared truth, and only the current
- * host can move it — everyone else's client continuously computes where
- * playback SHOULD be from that snapshot (see computeExpectedPosition in
- * packages/shared/src/sync.ts) rather than waiting on a peer's relayed
- * action, so a viewer's own local hiccup (buffering, the app being
- * backgrounded, a dying connection) can't touch the shared state at all.
- *
- * This used to accept play/pause/seek from ANY participant, not just the
- * host, despite the doc comment already claiming host-authority — a single
- * viewer's own player stalling or pausing itself while backgrounding/
- * disconnecting got relayed as if it were an authoritative action, pausing
- * the room for everyone else too. `getRoom`'s host is always someone
- * currently connected (removeMember promotes the next member the instant
- * the host disconnects), so playback keeps moving without needing anyone
- * still present to actively be "driving" it.
+ * Server-authoritative playback sync: the room's `playback` (position +
+ * isPlaying + the server's own timestamp) is the one shared truth. ANY
+ * participant may move it via play/pause/seek — it's a small room of people
+ * who trust each other, last write by server time wins — and everyone else's
+ * client continuously computes where playback SHOULD be from that snapshot
+ * (see computeExpectedPosition) rather than waiting on a relayed action.
+ * "Host" now only governs the queue and kicking.
  */
 export function registerSocketHandlers(io: StreamServer): void {
   io.on("connection", (socket) => {
@@ -82,14 +75,6 @@ export function registerSocketHandlers(io: StreamServer): void {
       if (!currentRoomId) return;
       const room = getRoom(currentRoomId);
       if (!room) return;
-
-      const isHost = room.hostSocketId === socket.id;
-      if (!isHost) {
-        // Not an error — a non-host's own player pausing itself (buffering,
-        // backgrounding) fires this; it just must not move the shared state.
-        logRoom("playback:rejected-not-host", { room: currentRoomId, userId: uid, kind, atSeconds: payload.atSeconds });
-        return;
-      }
 
       // Clamp: a buggy/hostile client shouldn't be able to park the room's
       // timeline at 1e9 seconds. The upper bound is the client's job (it
@@ -113,31 +98,52 @@ export function registerSocketHandlers(io: StreamServer): void {
       socket.to(currentRoomId).emit("playback:sync", { ...room.playback, originUserId: uid });
     }
 
+    /** After a real (grace-elapsed) departure: pause the room and, if that
+     *  person was host, hand the role to whoever's still here. */
+    function finalizeDeparture(room: Room, gone: { userId: number; name: string; wasHost: boolean }) {
+      if (room.members.length === 0) return; // the empty-room grace owns this case
+      if (gone.wasHost && room.hostUserId === gone.userId) {
+        promoteNextHost(room);
+        io.to(room.id).emit("room:participants", toParticipants(room));
+      }
+      if (pauseRoomNow(room)) {
+        logRoom("playback:paused", { room: room.id, byUserId: gone.userId, reason: "left", at: room.playback.positionSeconds });
+        io.to(room.id).emit("playback:sync", { ...room.playback, originUserId: gone.userId });
+        io.to(room.id).emit("playback:paused-by", { userId: gone.userId, userName: gone.name, reason: "left" });
+      }
+    }
+
     function leaveCurrentRoom(reason: "leave" | "disconnect") {
       if (!currentRoomId) return;
       const roomId = currentRoomId;
       const room = getRoom(roomId);
       if (room) {
-        const wasHost = room.hostSocketId === socket.id;
+        const wasHost = room.hostUserId === uid;
         const name = room.members.find((m) => m.socketId === socket.id)?.firstName ?? socket.data.user.firstName;
         removeMember(room, socket.id);
-        const newHost = hostUserId(room);
-        logRoom("member:left", {
-          room: roomId,
-          userId: uid,
-          reason,
-          wasHost,
-          newHostUserId: wasHost ? newHost : undefined,
-          remaining: room.members.length,
-        });
-        socket.to(roomId).emit("room:participants", toParticipants(room));
+        logRoom("member:left", { room: roomId, userId: uid, reason, wasHost, remaining: room.members.length });
 
-        // Somebody stopped watching — freeze the shared timeline rather than
-        // letting it run on without them. Whoever's left resumes when ready.
-        if (room.members.length > 0 && pauseRoomNow(room)) {
-          logRoom("playback:paused", { room: roomId, byUserId: uid, reason: "left", at: room.playback.positionSeconds });
-          io.to(roomId).emit("playback:sync", { ...room.playback, originUserId: uid });
-          io.to(roomId).emit("playback:paused-by", { userId: uid, userName: name, reason: "left" });
+        if (reason === "leave") {
+          // Explicit exit — no coming back, act now. finalizeDeparture emits
+          // the (post-promotion) participant list itself.
+          finalizeDeparture(room, { userId: uid, name, wasHost });
+        } else {
+          // A socket drop is usually a blip — show the person gone from the
+          // bar, but don't reassign host or pause yet. Wait it out; addMember
+          // cancels this the moment the same user rejoins.
+          socket.to(roomId).emit("room:participants", toParticipants(room));
+          const existing = room.disconnectTimers.get(uid);
+          if (existing) clearTimeout(existing);
+          const timer = setTimeout(() => {
+            room.disconnectTimers.delete(uid);
+            const stillGone = !room.members.some((m) => m.userId === uid);
+            if (stillGone) {
+              logRoom("member:left-final", { room: roomId, userId: uid, wasHost });
+              finalizeDeparture(room, { userId: uid, name, wasHost });
+            }
+          }, DISCONNECT_GRACE_MS);
+          timer.unref?.();
+          room.disconnectTimers.set(uid, timer);
         }
       }
       socket.leave(roomId);
@@ -176,8 +182,8 @@ export function registerSocketHandlers(io: StreamServer): void {
         room: roomId,
         userId: uid,
         createdRoom: !existed,
-        isHost: room.hostSocketId === socket.id,
-        hostUserId: hostUserId(room),
+        isHost: room.hostUserId === uid,
+        hostUserId: room.hostUserId,
         participants: room.members.length,
         playback: room.playback,
         hasSource: room.source !== null,
@@ -289,7 +295,7 @@ export function registerSocketHandlers(io: StreamServer): void {
     socket.on("queue:remove", ({ itemId }) => {
       if (!currentRoomId) return;
       const room = getRoom(currentRoomId);
-      if (!room || room.hostSocketId !== socket.id) return; // host-only
+      if (!room || room.hostUserId !== uid) return; // host-only
 
       removeQueueItem(room, itemId);
       io.to(currentRoomId).emit("queue:updated", { queue: room.queue });
@@ -298,7 +304,7 @@ export function registerSocketHandlers(io: StreamServer): void {
     socket.on("queue:advance", () => {
       if (!currentRoomId) return;
       const room = getRoom(currentRoomId);
-      if (!room || room.hostSocketId !== socket.id) return; // host-only, avoids a double-pop race
+      if (!room || room.hostUserId !== uid) return; // host-only, avoids a double-pop race
 
       if (!advanceQueue(room)) {
         logRoom("queue:advance-empty", { room: currentRoomId, byUserId: uid });
@@ -312,7 +318,7 @@ export function registerSocketHandlers(io: StreamServer): void {
     socket.on("room:kick", ({ targetUserId }) => {
       if (!currentRoomId) return;
       const room = getRoom(currentRoomId);
-      if (!room || room.hostSocketId !== socket.id) return; // host-only
+      if (!room || room.hostUserId !== uid) return; // host-only
 
       const target = room.members.find((m) => m.userId === targetUserId);
       if (!target || target.socketId === socket.id) return;
