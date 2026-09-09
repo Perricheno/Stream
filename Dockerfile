@@ -7,7 +7,7 @@
 FROM node:24-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ffmpeg python3 python3-pip ca-certificates \
+      ffmpeg python3 python3-pip ca-certificates chromium \
     && rm -rf /var/lib/apt/lists/* \
     && pip3 install --break-system-packages --no-cache-dir -U \
          yt-dlp \
@@ -19,6 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 #   curl_cffi is what makes `--impersonate` available: several tube sites
 #   reject yt-dlp's default TLS fingerprint outright with HTTP 403 before
 #   any extraction happens (see the retry in download/downloadManager.ts).
+#   chromium (Debian's own package, not Playwright's bundled download — its
+#   apt dependencies already pull in the right shared libs) backs
+#   download/browserResolve.ts's last-resort fallback for an extractor that
+#   broke because a site moved its player data into client-side JS.
 
 RUN corepack enable
 

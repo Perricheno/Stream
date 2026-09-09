@@ -3,6 +3,7 @@ import { rename } from "node:fs/promises";
 import { env } from "../../config/env";
 import { getVideo, listInterruptedVideos, updateVideo } from "../../db/videoRepository";
 import { deleteMediaFiles, hasRoomFor, mediaFilePath } from "../media/mediaStore";
+import { looksLikeClientRenderedFailure, resolveMediaUrlViaBrowser } from "./browserResolve";
 import { downloadFromDrive } from "./googleDrive";
 import { classifyImport } from "./importSource";
 import { ensureStreamable } from "./probe";
@@ -145,14 +146,28 @@ async function runJob(videoId: string, signal: AbortSignal): Promise<void> {
         res = await runYtDlp({ url, outputBase: rawBase, signal, onProgress });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        // Several tube sites answer yt-dlp's default TLS fingerprint with a
-        // flat 403 before extraction even starts. Retrying once with a
-        // browser fingerprint gets past that; the first attempt stays plain
-        // so the paths that already work (YouTube's cookie/PO-token flow)
-        // aren't disturbed.
-        if (signal.aborted || !env.ytDlpImpersonate || !looksLikeBotBlock(message)) throw err;
-        console.log(`[download] ${videoId} blocked (${message}) — retrying as ${env.ytDlpImpersonate}`);
-        res = await runYtDlp({ url, outputBase: rawBase, signal, onProgress, impersonate: env.ytDlpImpersonate });
+        if (signal.aborted) throw err;
+
+        if (env.ytDlpImpersonate && looksLikeBotBlock(message)) {
+          // Several tube sites answer yt-dlp's default TLS fingerprint with a
+          // flat 403 before extraction even starts. Retrying once with a
+          // browser fingerprint gets past that; the first attempt stays
+          // plain so the paths that already work (YouTube's cookie/PO-token
+          // flow) aren't disturbed.
+          console.log(`[download] ${videoId} blocked (${message}) — retrying as ${env.ytDlpImpersonate}`);
+          res = await runYtDlp({ url, outputBase: rawBase, signal, onProgress, impersonate: env.ytDlpImpersonate });
+        } else if (looksLikeClientRenderedFailure(message)) {
+          // A different class of failure: the extractor scrapes a JSON blob
+          // out of the static HTML, and the site now builds it in JS instead
+          // — no fingerprint retry fixes that. Render it for real and read
+          // the media URL off the network, then hand that direct URL to
+          // yt-dlp like any other direct link.
+          console.log(`[download] ${videoId} extractor broken (${message}) — resolving via headless browser`);
+          const resolvedUrl = await resolveMediaUrlViaBrowser(url, signal);
+          res = await runYtDlp({ url: resolvedUrl, outputBase: rawBase, signal, onProgress });
+        } else {
+          throw err;
+        }
       }
 
       downloadedPath = res.filePath;

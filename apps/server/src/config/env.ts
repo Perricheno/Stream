@@ -67,6 +67,12 @@ export const env = {
    * host without curl_cffi installed.
    */
   ytDlpImpersonate: process.env.YTDLP_IMPERSONATE ?? "chrome",
+  /** System Chromium (installed via apt, not Playwright's own bundled
+   *  download — see Dockerfile) used only as a last-resort fallback when an
+   *  extractor breaks because a site now builds its player data client-side
+   *  in JS (see download/browserResolve.ts). Blank disables the fallback
+   *  entirely, for a host without it installed. */
+  chromiumPath: process.env.CHROMIUM_PATH ?? "/usr/bin/chromium",
   /** Base URL for Bot API calls. Point this at a self-hosted Local Bot API
    *  Server (https://github.com/tdlib/telegram-bot-api) to lift the 20 MB
    *  getFile download limit up to 2000 MB — needed for pulling
