@@ -1,12 +1,12 @@
 import type { VideoImportSourceType } from "@stream/shared";
 import { env } from "../config/env";
 import { completeAuthRequest } from "../db/authRequestRepository";
-import { createVideo } from "../db/videoRepository";
+import { createVideo, getVideo } from "../db/videoRepository";
 import { classifyImport } from "../video/download/importSource";
 import { enqueueImport, onDownloadProgress, TELEGRAM_UPLOAD_REF_PREFIX } from "../video/download/downloadManager";
 import { assertPublicHttpUrl } from "../video/ssrfGuard";
 import type { TelegramDocument, TelegramMessage } from "./bot";
-import { editTelegramMessage, sendTelegramMessage } from "./sendTelegramMessage";
+import { editTelegramMessage, sendTelegramMessage, sendTelegramVideoFile } from "./sendTelegramMessage";
 
 const WELCOME =
   "Пришли мне ссылку на видео (YouTube, VK, тюб-сайты, Google Drive — что угодно) или сам видеофайл. " +
@@ -127,6 +127,10 @@ async function startImport({ chatId, userId, sourceType, ref, titleHint }: Start
       } else {
         void sendTelegramMessage(chatId, doneText, button ? { text: "Смотреть вместе", url: button } : undefined);
       }
+      // The whole point of a downloader bot: hand over the actual file, not
+      // just a link. Best-effort — a file over the current Bot API's limit
+      // still leaves the video usable via the "watch together" button above.
+      void deliverVideoFile(chatId, record.id, title);
       return;
     }
 
@@ -159,4 +163,19 @@ async function startImport({ chatId, userId, sourceType, ref, titleHint }: Start
   }, PROGRESS_LISTEN_TIMEOUT_MS).unref?.();
 
   enqueueImport(record.id);
+}
+
+/** Sends the finished file itself to the chat. See sendTelegramVideoFile's
+ *  doc comment for the 50 MB public-API limit this can hit. */
+async function deliverVideoFile(chatId: number, videoId: string, title: string): Promise<void> {
+  const record = getVideo(videoId);
+  if (!record?.filePath) return;
+
+  const result = await sendTelegramVideoFile(chatId, record.filePath, escapeHtml(title));
+  if (!result.ok) {
+    const note = result.tooLarge
+      ? "⚠️ Файл слишком большой, чтобы прислать его прямо в чат (лимит Telegram Bot API) — но он сохранён, смотри по кнопке выше."
+      : "⚠️ Не получилось прислать файл сюда — но он сохранён, смотри по кнопке выше.";
+    void sendTelegramMessage(chatId, note);
+  }
 }

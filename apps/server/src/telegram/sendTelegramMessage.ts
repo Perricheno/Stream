@@ -1,5 +1,5 @@
 import { env } from "../config/env";
-import { callBotApi } from "./botApi";
+import { callBotApi, callBotApiMultipart, TelegramApiError } from "./botApi";
 
 export interface InlineButton {
   text: string;
@@ -35,6 +35,33 @@ export async function sendTelegramMessage(chatId: number, text: string, inlineBu
     // Timed out, or a network-level/API failure — a hung/failed request
     // shouldn't propagate as an unhandled rejection into the caller.
     return null;
+  }
+}
+
+export type SendVideoResult = { ok: true } | { ok: false; tooLarge: boolean; reason: string };
+
+/**
+ * Sends an actual downloaded video file to the user as a Telegram video
+ * message — the point of the bot being a "downloader": you get the file
+ * itself in the chat, not just a link. Distinguishes "too large for the
+ * current Bot API" from other failures so the caller can explain that
+ * specifically (raising it needs a Local Bot API Server, see deploy/).
+ */
+export async function sendTelegramVideoFile(chatId: number, filePath: string, caption?: string): Promise<SendVideoResult> {
+  if (!env.botToken) return { ok: false, tooLarge: false, reason: "bot not configured" };
+
+  try {
+    await callBotApiMultipart(
+      "sendVideo",
+      { chat_id: String(chatId), caption: caption ?? "", supports_streaming: "true" },
+      { field: "video", path: filePath },
+    );
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const tooLarge = err instanceof TelegramApiError && /too large|entity too large|413/i.test(message);
+    console.error("[bot] sendVideo failed:", message);
+    return { ok: false, tooLarge, reason: message };
   }
 }
 

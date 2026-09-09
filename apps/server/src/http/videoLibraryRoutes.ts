@@ -1,8 +1,9 @@
 import { Router } from "express";
-import { createVideo, getVideo, listReadyVideosByUser, toLibraryVideo, type VideoRecord } from "../db/videoRepository";
+import { createVideo, deleteVideo, getVideo, listVideosByUser, toLibraryVideo, type VideoRecord } from "../db/videoRepository";
 import { isUserWatchingLibraryVideo } from "../rooms/RoomStore";
 import { classifyImport } from "../video/download/importSource";
-import { enqueueImport } from "../video/download/downloadManager";
+import { cancelImport, enqueueImport } from "../video/download/downloadManager";
+import { deleteMediaFiles } from "../video/media/mediaStore";
 import { signStreamToken } from "../video/media/streamToken";
 import { assertPublicHttpUrl } from "../video/ssrfGuard";
 import { rateLimit } from "./rateLimit";
@@ -22,7 +23,7 @@ function canPlay(userId: number, record: VideoRecord): boolean {
 }
 
 videoLibraryRoutes.get("/", (req, res) => {
-  res.json(listReadyVideosByUser(req.telegramUser!.id));
+  res.json(listVideosByUser(req.telegramUser!.id));
 });
 
 videoLibraryRoutes.post("/import", rateLimit(20, 60_000), async (req, res) => {
@@ -54,6 +55,20 @@ videoLibraryRoutes.get("/:id", (req, res) => {
     return;
   }
   res.json(toLibraryVideo(record));
+});
+
+videoLibraryRoutes.delete("/:id", (req, res) => {
+  const record = getVideo(req.params.id);
+  // Deleting is owner-only — unlike playback, there's no reason a room guest
+  // should be able to wipe a video out of someone else's library.
+  if (!record || record.addedByUserId !== req.telegramUser!.id) {
+    res.status(404).json({ error: "not found" });
+    return;
+  }
+  cancelImport(record.id);
+  deleteVideo(record.id);
+  void deleteMediaFiles(record.id);
+  res.json({ ok: true });
 });
 
 videoLibraryRoutes.get("/:id/stream-token", (req, res) => {

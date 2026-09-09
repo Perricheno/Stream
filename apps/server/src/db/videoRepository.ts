@@ -79,6 +79,15 @@ export function listReadyVideosByUser(userId: number): LibraryVideo[] {
   return rows.map((row) => toLibraryVideo(rowToRecord(row)));
 }
 
+/** The owner's whole library regardless of status — the "Мои видео" screen
+ *  shows in-progress and failed imports too, not just what's ready to play. */
+export function listVideosByUser(userId: number): LibraryVideo[] {
+  const rows = db
+    .prepare(`SELECT * FROM videos WHERE added_by_user_id = ? ORDER BY created_at DESC`)
+    .all(userId) as unknown as VideoRow[];
+  return rows.map((row) => toLibraryVideo(rowToRecord(row)));
+}
+
 /** Rows left mid-download by a previous process — nothing is resuming them. */
 export function listInterruptedVideos(): VideoRecord[] {
   const rows = db.prepare(`SELECT * FROM videos WHERE status = 'downloading'`).all() as unknown as VideoRow[];
