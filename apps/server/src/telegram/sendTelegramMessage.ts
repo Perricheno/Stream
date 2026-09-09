@@ -40,22 +40,45 @@ export async function sendTelegramMessage(chatId: number, text: string, inlineBu
 
 export type SendVideoResult = { ok: true } | { ok: false; tooLarge: boolean; reason: string };
 
+export interface VideoDimensions {
+  width: number;
+  height: number;
+  durationSeconds: number | null;
+}
+
 /**
  * Sends an actual downloaded video file to the user as a Telegram video
  * message — the point of the bot being a "downloader": you get the file
  * itself in the chat, not just a link. Distinguishes "too large for the
  * current Bot API" from other failures so the caller can explain that
  * specifically (raising it needs a Local Bot API Server, see deploy/).
+ *
+ * Deliberately omits `supports_streaming` — that flag routes the upload
+ * through Telegram's own server-side adaptive-streaming transcode, which
+ * assumes standard resolutions and visibly distorts anything else (a
+ * vertical phone recording, an odd ratio). Without it Telegram just stores
+ * and plays the file byte-for-byte, exactly as received — which is the
+ * whole point of a "downloader" bot. `width`/`height` (from ffprobe, when
+ * available) only affect the placeholder shown before the file finishes
+ * downloading in the recipient's client, not the actual playback.
  */
-export async function sendTelegramVideoFile(chatId: number, filePath: string, caption?: string): Promise<SendVideoResult> {
+export async function sendTelegramVideoFile(
+  chatId: number,
+  filePath: string,
+  caption?: string,
+  dimensions?: VideoDimensions,
+): Promise<SendVideoResult> {
   if (!env.botToken) return { ok: false, tooLarge: false, reason: "bot not configured" };
 
+  const params: Record<string, string> = { chat_id: String(chatId), caption: caption ?? "" };
+  if (dimensions) {
+    params.width = String(dimensions.width);
+    params.height = String(dimensions.height);
+    if (dimensions.durationSeconds) params.duration = String(dimensions.durationSeconds);
+  }
+
   try {
-    await callBotApiMultipart(
-      "sendVideo",
-      { chat_id: String(chatId), caption: caption ?? "", supports_streaming: "true" },
-      { field: "video", path: filePath },
-    );
+    await callBotApiMultipart("sendVideo", params, { field: "video", path: filePath });
     return { ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

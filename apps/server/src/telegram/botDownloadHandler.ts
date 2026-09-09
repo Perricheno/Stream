@@ -4,6 +4,7 @@ import { completeAuthRequest } from "../db/authRequestRepository";
 import { createVideo, getVideo } from "../db/videoRepository";
 import { classifyImport } from "../video/download/importSource";
 import { enqueueImport, onDownloadProgress, TELEGRAM_UPLOAD_REF_PREFIX } from "../video/download/downloadManager";
+import { probe } from "../video/download/probe";
 import { assertPublicHttpUrl } from "../video/ssrfGuard";
 import type { TelegramDocument, TelegramMessage } from "./bot";
 import { editTelegramMessage, sendTelegramMessage, sendTelegramVideoFile } from "./sendTelegramMessage";
@@ -181,7 +182,15 @@ async function deliverVideoFile(chatId: number, videoId: string, title: string):
   const record = getVideo(videoId);
   if (!record?.filePath) return;
 
-  const result = await sendTelegramVideoFile(chatId, record.filePath, escapeHtml(title));
+  // Best-effort — a probe failure shouldn't block delivery, it just means
+  // Telegram won't have a size hint for the pre-download placeholder.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  const info = await probe(record.filePath, controller.signal).catch(() => null);
+  clearTimeout(timer);
+  const dimensions = info?.width && info.height ? { width: info.width, height: info.height, durationSeconds: info.durationSeconds } : undefined;
+
+  const result = await sendTelegramVideoFile(chatId, record.filePath, escapeHtml(title), dimensions);
   if (!result.ok) {
     const note = result.tooLarge
       ? "⚠️ Файл слишком большой, чтобы прислать его прямо в чат (лимит Telegram Bot API) — но он сохранён, смотри по кнопке выше."

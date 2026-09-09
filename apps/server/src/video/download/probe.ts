@@ -7,6 +7,8 @@ interface ProbeInfo {
   videoCodec: string | null;
   audioCodec: string | null;
   durationSeconds: number | null;
+  width: number | null;
+  height: number | null;
 }
 
 // Codecs a plain <video> element plays across the browsers this app targets.
@@ -43,16 +45,19 @@ export async function probe(filePath: string, signal: AbortSignal): Promise<Prob
 
   const data = JSON.parse(stdout) as {
     format?: { format_name?: string; duration?: string };
-    streams?: { codec_type?: string; codec_name?: string }[];
+    streams?: { codec_type?: string; codec_name?: string; width?: number; height?: number }[];
   };
   const streams = data.streams ?? [];
   const duration = Number(data.format?.duration);
+  const videoStream = streams.find((s) => s.codec_type === "video");
 
   return {
     container: (data.format?.format_name ?? "").toLowerCase(),
-    videoCodec: streams.find((s) => s.codec_type === "video")?.codec_name?.toLowerCase() ?? null,
+    videoCodec: videoStream?.codec_name?.toLowerCase() ?? null,
     audioCodec: streams.find((s) => s.codec_type === "audio")?.codec_name?.toLowerCase() ?? null,
     durationSeconds: Number.isFinite(duration) && duration > 0 ? Math.round(duration) : null,
+    width: videoStream?.width ?? null,
+    height: videoStream?.height ?? null,
   };
 }
 
