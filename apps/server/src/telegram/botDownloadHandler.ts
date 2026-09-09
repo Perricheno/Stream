@@ -31,6 +31,16 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+const PROGRESS_BAR_LENGTH = 12;
+
+/** A block-character progress bar for the chat message — Telegram has no
+ *  native progress widget, so this is the closest thing to a visual bar. */
+function renderProgressBar(percent: number): string {
+  const clamped = Math.max(0, Math.min(100, percent));
+  const filled = Math.round((clamped / 100) * PROGRESS_BAR_LENGTH);
+  return "▓".repeat(filled) + "░".repeat(PROGRESS_BAR_LENGTH - filled);
+}
+
 /** Single DM handler wired into the bot via registerBotMessageHandler. */
 export async function handleBotMessage(message: TelegramMessage): Promise<void> {
   const chatId = message.chat.id;
@@ -153,8 +163,8 @@ async function startImport({ chatId, userId, sourceType, ref, titleHint }: Start
 
     const label =
       p.status === "converting"
-        ? "Обработка видео…"
-        : `Скачивание… ${Math.round(p.progressPercent)}%${p.speedText ? ` · ${p.speedText}` : ""}`;
+        ? `Обработка видео…\n${renderProgressBar(p.progressPercent)}`
+        : `Скачивание… ${Math.round(p.progressPercent)}%${p.speedText ? ` · ${p.speedText}` : ""}\n${renderProgressBar(p.progressPercent)}`;
     void editTelegramMessage(chatId, statusMessageId, `⏳ ${label}`);
   });
 

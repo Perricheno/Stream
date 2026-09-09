@@ -148,28 +148,49 @@ export function LibraryScreen({ open, onOpenChange, onWatch }: LibraryScreenProp
                     ? `${t("libraryStatusDownloading")} · ${Math.round(video.progressPercent)}%`
                     : `${t("libraryStatusFailed")}${video.errorMessage ? `: ${video.errorMessage}` : ""}`;
               return (
-                <Cell
-                  key={video.id}
-                  before={<Avatar size={40} acronym="▶" />}
-                  subtitle={subtitle}
-                  onClick={video.status === "ready" ? () => onWatch(video.id, video.title || t("myVideos")) : undefined}
-                  after={
-                    <IconButton
-                      mode="plain"
-                      size="s"
-                      disabled={deletingId === video.id}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void remove(video);
+                <div key={video.id}>
+                  <Cell
+                    before={<Avatar size={40} acronym="▶" />}
+                    subtitle={subtitle}
+                    onClick={video.status === "ready" ? () => onWatch(video.id, video.title || t("myVideos")) : undefined}
+                    after={
+                      <IconButton
+                        mode="plain"
+                        size="s"
+                        disabled={deletingId === video.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void remove(video);
+                        }}
+                        aria-label={t("deleteVideoConfirm")}
+                      >
+                        <TrashIcon />
+                      </IconButton>
+                    }
+                  >
+                    {video.title || video.sourceUrl || video.id}
+                  </Cell>
+                  {video.status === "downloading" && (
+                    <div
+                      style={{
+                        margin: "-6px 16px 10px",
+                        height: 4,
+                        borderRadius: 2,
+                        background: "var(--tgui--outline, rgba(127,127,127,0.25))",
+                        overflow: "hidden",
                       }}
-                      aria-label={t("deleteVideoConfirm")}
                     >
-                      <TrashIcon />
-                    </IconButton>
-                  }
-                >
-                  {video.title || video.sourceUrl || video.id}
-                </Cell>
+                      <div
+                        style={{
+                          width: `${Math.min(100, Math.max(0, video.progressPercent))}%`,
+                          height: "100%",
+                          background: "var(--tgui--link_color, #2ea6ff)",
+                          transition: "width 0.3s ease",
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
               );
             })}
           </Section>
