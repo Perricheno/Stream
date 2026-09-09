@@ -35,8 +35,14 @@ if [ ! -f deploy/server.env ]; then
   echo "!! $REMOTE_DIR/deploy/server.env is missing — copy it from deploy/server.env.example and fill it in, then re-run." >&2
   exit 1
 fi
-docker compose -f deploy/compose.yml up -d --build
-docker compose -f deploy/compose.yml ps
+COMPOSE="docker compose -f deploy/compose.yml"
+# Local Bot API Server (raises the Bot API's 50 MB upload cap to 2000 MB) —
+# only wired in once $REMOTE_DIR/.env (TELEGRAM_API_ID/HASH from
+# https://my.telegram.org/apps) exists, so a fresh host without it yet still
+# deploys fine without it.
+if [ -f .env ]; then COMPOSE="$COMPOSE --env-file .env -f deploy/telegram-bot-api.compose.yml"; fi
+$COMPOSE up -d --build
+$COMPOSE ps
 EOF
 
 echo "✓ done. Health: ssh $SSH_HOST 'curl -sf localhost:4000/health'"

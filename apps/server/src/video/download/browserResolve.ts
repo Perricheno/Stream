@@ -8,8 +8,8 @@ const RESOLVE_TIMEOUT_MS = 20_000;
 // video site also generates while loading — the extension check catches
 // direct files, the content-type check catches CDN URLs with no extension
 // at all (common for signed/tokenized manifest URLs).
-const MEDIA_URL_RE = /\.(mp4|m3u8|webm)(\?|$)/i;
-const MEDIA_CONTENT_TYPE_RE = /^(video\/|application\/(x-mpegurl|vnd\.apple\.mpegurl))/i;
+const MEDIA_URL_RE = /\.(mp4|m3u8|webm|mpd)(\?|$)/i;
+const MEDIA_CONTENT_TYPE_RE = /^(video\/|audio\/mp4|application\/(x-mpegurl|vnd\.apple\.mpegurl|dash\+xml))/i;
 
 /** True only for the specific "this extractor scrapes data_raw/initial-state
  *  out of the raw HTML, and the site now builds it client-side in JS
@@ -44,6 +44,10 @@ export async function resolveMediaUrlViaBrowser(pageUrl: string, signal: AbortSi
 
     page.on("response", (response) => {
       const url = response.url();
+      // blob:/data: URLs are the <video> element's local MSE handle — real
+      // network traffic never has one, and it only resolves inside this
+      // browser session anyway, so it's useless to whatever downloads next.
+      if (!/^https?:/i.test(url)) return;
       const contentType = response.headers()["content-type"] ?? "";
       if (MEDIA_URL_RE.test(url) || MEDIA_CONTENT_TYPE_RE.test(contentType)) found.add(url);
     });
@@ -64,11 +68,13 @@ export async function resolveMediaUrlViaBrowser(pageUrl: string, signal: AbortSi
     if (signal.aborted) throw new Error("cancelled");
     if (found.size === 0) throw new Error("no media request seen while rendering the page");
 
-    // Prefer an HLS master playlist over a raw mp4 fragment — it's far more
-    // likely to be the one real "here's the video" URL rather than a single
-    // chunk of an adaptive stream.
+    // A manifest (HLS/DASH) is what we actually want — yt-dlp downloads
+    // every segment behind it itself. A bare .mp4/.webm response is only
+    // useful if it's the *whole* file; picked as a last resort since a
+    // fragmented player often makes several small range requests to the
+    // same-looking URL that individually aren't the full video.
     const urls = [...found];
-    return urls.find((u) => /\.m3u8/i.test(u)) ?? urls[0];
+    return urls.find((u) => /\.(m3u8|mpd)(\?|$)/i.test(u)) ?? urls[0];
   } finally {
     await browser.close();
   }

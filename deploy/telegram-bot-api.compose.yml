@@ -7,11 +7,13 @@
 #
 # Usage:
 #   1. Get api_id / api_hash from https://my.telegram.org (Apps).
-#   2. docker compose -f deploy/telegram-bot-api.compose.yml up -d
-#   3. In apps/server/.env set:
-#        TELEGRAM_BOT_API_BASE_URL=http://localhost:8081
-#      (or the container's reachable address if the app runs in another
-#      container / on another host).
+#   2. Put them in <repo root>/.env on the host (TELEGRAM_API_ID=...,
+#      TELEGRAM_API_HASH=...) — deploy.sh picks this file up automatically
+#      and includes this compose file whenever it's present.
+#   3. In deploy/server.env set:
+#        TELEGRAM_BOT_API_BASE_URL=http://telegram-bot-api:8081
+#      (the service name below, reachable because deploy.sh brings this file
+#      up together with deploy/compose.yml on the same network).
 #
 # Do NOT pass --local: in local mode getFile returns an absolute filesystem
 # path instead of an HTTP-fetchable one, which this app's downloader does not

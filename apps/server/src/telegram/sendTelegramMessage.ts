@@ -108,7 +108,13 @@ export async function editTelegramMessage(
       disable_web_page_preview: true,
     });
     return true;
-  } catch {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Expected and harmless — fires whenever two progress ticks round to the
+    // same displayed percentage, which is common. Anything else (a 429 from
+    // editing too fast, a malformed request) is worth knowing about, since
+    // this function has been failing completely silently until now.
+    if (!/message is not modified/i.test(message)) console.error("[bot] editMessageText failed:", message);
     return false;
   }
 }
