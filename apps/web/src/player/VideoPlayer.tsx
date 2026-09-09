@@ -56,6 +56,11 @@ export function VideoPlayer({
   const progress = usePlayerProgress(playerRef);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
+  // Defaults to 16:9 until the source reports its real dimensions (see
+  // onDimensions on PlayerAdapterEvents) — otherwise a vertical phone
+  // recording or any non-16:9 file gets forced into a 16:9 box and looks
+  // squashed/stretched instead of correctly letterboxed.
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
 
   // A `library` video isn't playable until its import job finishes — this
   // polls the job and, once ready, hands back a `file` source pointing at
@@ -78,7 +83,23 @@ export function VideoPlayer({
     if (progress.isPlaying) setStreamError(null);
   }, [progress.isPlaying]);
 
-  const events = { onPlay, onPause, onSeek, onEnded, onBuffering, onPlayBlocked, onError: handleError };
+  // A fresh source's dimensions haven't been reported yet — fall back to
+  // 16:9 again rather than keeping the previous video's ratio on screen.
+  const sourceKey = source.type === "library" ? source.videoId : source.type === "file" ? source.url : source.type;
+  useEffect(() => {
+    setAspectRatio(null);
+  }, [sourceKey]);
+
+  const events = {
+    onPlay,
+    onPause,
+    onSeek,
+    onEnded,
+    onBuffering,
+    onPlayBlocked,
+    onError: handleError,
+    onDimensions: (width: number, height: number) => setAspectRatio(width / height),
+  };
   const html5Source: Extract<VideoSource, { type: "file" }> | undefined =
     source.type === "file" ? source : source.type === "library" ? library.fileSource : undefined;
   const hasPlayer = source.type === "youtube" || source.type === "vimeo" || html5Source !== undefined;
@@ -120,6 +141,10 @@ export function VideoPlayer({
     <div
       className={`${styles.container} ${isFullscreen ? styles.fullscreen : ""}`}
       data-chat-open={isFullscreen && shrinkForChat ? "true" : undefined}
+      // Fullscreen's own CSS class already sets aspect-ratio: unset to fill
+      // the viewport — an inline style here would win over that and break
+      // it, so only apply the real ratio outside fullscreen.
+      style={!isFullscreen && aspectRatio ? { aspectRatio: String(aspectRatio) } : undefined}
     >
       {source.type === "youtube" ? (
         <YouTubePlayerAdapter ref={playerRef} videoId={source.videoId} suppressed={suppressed} {...events} />

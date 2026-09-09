@@ -10,7 +10,10 @@ interface Html5PlayerAdapterProps extends PlayerAdapterEvents {
 }
 
 export const Html5PlayerAdapter = forwardRef<PlayerHandle, Html5PlayerAdapterProps>(
-  function Html5PlayerAdapter({ source, suppressed, onPlay, onPause, onSeek, onEnded, onBuffering, onPlayBlocked, onError }, ref) {
+  function Html5PlayerAdapter(
+    { source, suppressed, onPlay, onPause, onSeek, onEnded, onBuffering, onPlayBlocked, onError, onDimensions },
+    ref,
+  ) {
     const videoRef = useRef<HTMLVideoElement>(null);
     // useImperativeHandle closes over [] — read callbacks through a ref so
     // play()'s rejection handler always calls the current onPlayBlocked.
@@ -112,6 +115,7 @@ export const Html5PlayerAdapter = forwardRef<PlayerHandle, Html5PlayerAdapterPro
           video.currentTime = resumeAtRef.current;
           resumeAtRef.current = 0;
         }
+        if (video.videoWidth > 0 && video.videoHeight > 0) onDimensions?.(video.videoWidth, video.videoHeight);
       };
       const handleError = () => {
         const err = video.error;
@@ -136,7 +140,7 @@ export const Html5PlayerAdapter = forwardRef<PlayerHandle, Html5PlayerAdapterPro
         video.removeEventListener("loadedmetadata", handleLoadedMetadata);
         video.removeEventListener("error", handleError);
       };
-    }, [onPlay, onPause, onSeek, onEnded, onBuffering, onError, suppressed]);
+    }, [onPlay, onPause, onSeek, onEnded, onBuffering, onError, onDimensions, suppressed]);
 
     return <video ref={videoRef} playsInline className={styles.fill} />;
   },

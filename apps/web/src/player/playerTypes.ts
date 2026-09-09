@@ -69,6 +69,14 @@ export interface PlayerAdapterEvents {
    *  position). Fired unconditionally, including for stalls caused by our
    *  own programmatic seeks, since the buffering is real either way. */
   onBuffering(isBuffering: boolean): void;
+  /** The source's real pixel dimensions, once known — lets the container
+   *  match the actual video's aspect ratio instead of assuming 16:9, so a
+   *  vertical phone recording or an odd ratio letterboxes correctly instead
+   *  of being forced into a 16:9 box. Only the HTML5 file/HLS adapter can
+   *  report this cheaply (`<video>`'s own videoWidth/videoHeight); YouTube
+   *  and Vimeo's iframes don't expose it without extra API calls, so they
+   *  simply never call it and the container falls back to 16:9 for them. */
+  onDimensions?(width: number, height: number): void;
 }
 
 export const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
