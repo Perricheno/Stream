@@ -51,16 +51,29 @@ export function AppRouter() {
   // and the SDK's own hook throws rather than returning empty.
   const { startParam } = useSafeLaunchParams();
   // A `video_<id>` deep link opens a brand-new room with that library video
-  // already selected — resolve it to a room id once, on first mount.
-  const [pendingVideoId] = useState<string | null>(() => readVideoIdFromStartParam(startParam));
+  // already selected. Also settable from Home ("Мои видео" -> watch), not
+  // just on first mount from a Telegram start param.
+  const [pendingVideoId, setPendingVideoId] = useState<string | null>(() => readVideoIdFromStartParam(startParam));
   const [roomId, setRoomId] = useState<string | null>(
     () => readRoomIdFromStartParam(startParam) ?? (readVideoIdFromStartParam(startParam) ? generateRoomId() : null),
   );
   const [autoAddFriendId] = useState<number | null>(() => readFriendIdFromStartParam(startParam));
   const initialVideoId = roomId && pendingVideoId ? pendingVideoId : undefined;
 
-  const openRoom = useCallback((id: string) => navigateWithTransition(() => setRoomId(id)), []);
-  const goHome = useCallback(() => navigateWithTransition(() => setRoomId(null)), []);
+  const openRoom = useCallback((id: string, videoId?: string) => {
+    if (videoId) setPendingVideoId(videoId);
+    navigateWithTransition(() => setRoomId(id));
+  }, []);
+  const goHome = useCallback(
+    () =>
+      navigateWithTransition(() => {
+        setRoomId(null);
+        // Otherwise a later "create room" from Home would replay this video
+        // into a room nobody asked for it in.
+        setPendingVideoId(null);
+      }),
+    [],
+  );
 
   // Prefetch the Room screen's chunk while the user's still on Home, so the
   // near-certain first room-entry doesn't have to wait on the import —

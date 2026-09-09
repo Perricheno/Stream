@@ -21,6 +21,8 @@ import { ActiveRoomsList } from "./ActiveRoomsList";
 // main bundle for every user regardless of whether they ever open either.
 const SettingsPanel = lazy(() => import("../Settings/SettingsPanel").then((m) => ({ default: m.SettingsPanel })));
 const FriendsPanel = lazy(() => import("../Friends/FriendsPanel").then((m) => ({ default: m.FriendsPanel })));
+const LibraryScreen = lazy(() => import("../Library/LibraryScreen").then((m) => ({ default: m.LibraryScreen })));
+const ProfileScreen = lazy(() => import("../Profile/ProfileScreen").then((m) => ({ default: m.ProfileScreen })));
 
 function GearIcon() {
   return (
@@ -62,12 +64,28 @@ function PinIcon() {
   );
 }
 
+function VideoLibraryIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M4 5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H4Zm6.5 4.7 4 2.3-4 2.3V9.7ZM20 8.5v7l3 2v-11l-3 2Z" />
+    </svg>
+  );
+}
+
+function ProfileIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.42 0-9 2.24-9 6v2h18v-2c0-3.76-4.58-6-9-6Z" />
+    </svg>
+  );
+}
+
 function generateRoomId(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
 interface HomeScreenProps {
-  onOpenRoom: (roomId: string) => void;
+  onOpenRoom: (roomId: string, videoId?: string) => void;
   autoAddFriendId?: number | null;
 }
 
@@ -85,6 +103,10 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [friendsLoaded, setFriendsLoaded] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryLoaded, setLibraryLoaded] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const autoAddedRef = useRef(false);
 
   const openSettings = useCallback(() => {
@@ -94,6 +116,14 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
   const openFriends = useCallback(() => {
     setFriendsLoaded(true);
     setFriendsOpen(true);
+  }, []);
+  const openLibrary = useCallback(() => {
+    setLibraryLoaded(true);
+    setLibraryOpen(true);
+  }, []);
+  const openProfile = useCallback(() => {
+    setProfileLoaded(true);
+    setProfileOpen(true);
   }, []);
 
   useEffect(() => {
@@ -133,6 +163,17 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
     onOpenRoom(id);
   }, [joinCode, addRoom, onOpenRoom, haptics]);
 
+  const watchLibraryVideo = useCallback(
+    (videoId: string) => {
+      haptics.impact("medium");
+      const id = generateRoomId();
+      addRoom(id);
+      setLibraryOpen(false);
+      onOpenRoom(id, videoId);
+    },
+    [addRoom, onOpenRoom, haptics],
+  );
+
   const scanQrToJoin = useCallback(async () => {
     if (!openQrScanner.isAvailable()) return;
     try {
@@ -167,8 +208,14 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
             {fullscreen.isFullscreen ? <CollapseIcon /> : <ExpandIcon />}
           </IconButton>
         )}
+        <IconButton mode="plain" size="m" onClick={openLibrary} aria-label={t("myVideos")}>
+          <VideoLibraryIcon />
+        </IconButton>
         <IconButton mode="plain" size="m" onClick={openFriends} aria-label={t("friends")}>
           <PeopleIcon />
+        </IconButton>
+        <IconButton mode="plain" size="m" onClick={openProfile} aria-label={t("profile")}>
+          <ProfileIcon />
         </IconButton>
         <IconButton mode="plain" size="m" onClick={openSettings} aria-label={t("settings")}>
           <GearIcon />
@@ -227,6 +274,16 @@ export function HomeScreen({ onOpenRoom, autoAddFriendId }: HomeScreenProps) {
       {settingsLoaded && (
         <Suspense fallback={null}>
           <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
+        </Suspense>
+      )}
+      {libraryLoaded && (
+        <Suspense fallback={null}>
+          <LibraryScreen open={libraryOpen} onOpenChange={setLibraryOpen} onWatch={watchLibraryVideo} />
+        </Suspense>
+      )}
+      {profileLoaded && (
+        <Suspense fallback={null}>
+          <ProfileScreen open={profileOpen} onOpenChange={setProfileOpen} />
         </Suspense>
       )}
     </List>

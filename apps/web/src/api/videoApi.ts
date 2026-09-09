@@ -26,13 +26,25 @@ export async function resolveVideo(url: string): Promise<VideoSource> {
   return { type: "library", videoId: video.id, title: video.title || undefined };
 }
 
-/** The current user's ready-to-play library (own downloads only). */
+/** The current user's whole library — every status, own downloads only. */
 export function listVideos(): Promise<LibraryVideo[]> {
   return api.get("/videos");
 }
 
 export function getVideo(id: string): Promise<LibraryVideo> {
   return api.get(`/videos/${id}`);
+}
+
+export function deleteVideo(id: string): Promise<{ ok: true }> {
+  return api.delete(`/videos/${id}`);
+}
+
+/** Kicks off a download without needing a directly-playable/resolved link —
+ *  the "Мои видео" screen's own add-a-link box uses this instead of
+ *  resolveVideo(), since it always wants a library row (even for a link
+ *  that COULD play directly), not a youtube/vimeo/file source. */
+export function importVideo(url: string): Promise<{ video: LibraryVideo }> {
+  return api.post("/videos/import", { url });
 }
 
 /** Absolute path for a <video> element's `src` — note this bypasses the
