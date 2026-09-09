@@ -15,7 +15,11 @@ const WELCOME =
 
 const URL_RE = /\bhttps?:\/\/\S+/i;
 const VIDEO_DOC_EXT_RE = /\.(mp4|mkv|webm|mov|m4v|avi|ts|m2ts|flv)$/i;
-const EDIT_THROTTLE_MS = 2500;
+// Telegram itself rate-limits editMessageText well below this for a single
+// chat — a burst of edits faster than it allows just fails silently (see
+// editTelegramMessage's catch), so the bar update simply gets skipped that
+// tick rather than erroring or spamming retries.
+const EDIT_THROTTLE_MS = 500;
 // Stop listening for progress on a job that's clearly never going to finish.
 const PROGRESS_LISTEN_TIMEOUT_MS = 45 * 60 * 1000;
 

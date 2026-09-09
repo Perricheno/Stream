@@ -89,10 +89,28 @@ async function runJob(videoId: string, signal: AbortSignal): Promise<void> {
     return;
   }
 
+  // The bot chat's progress edits subscribe to emit() directly (live,
+  // in-memory) but the Mini App's My Videos screen only has REST polling —
+  // without persisting to the DB here too, it stays stuck at 0% the whole
+  // download and only jumps once at the end. Throttled the same way the
+  // bot throttles its own message edits, so a fast yt-dlp progress stream
+  // doesn't turn into a SQLite write per tick.
+  const PERSIST_THROTTLE_MS = 2000;
+  let lastPersistedAt = 0;
+
   try {
     const rawBase = mediaFilePath(videoId, ".src"); // yt-dlp/Drive write here first
     let downloadedPath: string;
     let title = record.title;
+
+    const reportProgress = (percent: number, speedText?: string) => {
+      emit({ videoId, status: "downloading", progressPercent: percent, speedText, title });
+      const now = Date.now();
+      if (now - lastPersistedAt >= PERSIST_THROTTLE_MS) {
+        lastPersistedAt = now;
+        updateVideo(videoId, { progressPercent: percent });
+      }
+    };
 
     if (record.sourceType === "gdrive") {
       const { driveFileId } = classifyImport(record.sourceUrl ?? "");
@@ -103,8 +121,7 @@ async function runJob(videoId: string, signal: AbortSignal): Promise<void> {
         outputPath: out,
         maxBytes: DRIVE_FILE_MAX_BYTES,
         signal,
-        onProgress: (percent) =>
-          emit({ videoId, status: "downloading", progressPercent: percent, title }),
+        onProgress: (percent) => reportProgress(percent),
       });
       downloadedPath = res.filePath;
       title = title || res.title;
@@ -116,18 +133,11 @@ async function runJob(videoId: string, signal: AbortSignal): Promise<void> {
         fileId,
         outputPath: out,
         signal,
-        onProgress: (percent) => emit({ videoId, status: "downloading", progressPercent: percent, title }),
+        onProgress: (percent) => reportProgress(percent),
       });
       downloadedPath = res.filePath;
     } else {
-      const onProgress = (percentText: string, speedText: string) =>
-        emit({
-          videoId,
-          status: "downloading",
-          progressPercent: parsePercent(percentText),
-          speedText: speedText || undefined,
-          title,
-        });
+      const onProgress = (percentText: string, speedText: string) => reportProgress(parsePercent(percentText), speedText || undefined);
       const url = record.sourceUrl ?? "";
 
       let res;
